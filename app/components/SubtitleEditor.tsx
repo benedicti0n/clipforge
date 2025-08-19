@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { LoadingState } from './LoadingSpinner';
+import { ProgressBar } from './ProgressBar';
+import { SubtitleEditorSkeleton } from './SkeletonLoader';
 
 interface SubtitleSegment {
     start: number;

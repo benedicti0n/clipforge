@@ -3,6 +3,9 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { Download, AlertCircle, CheckCircle, Loader2, X, RotateCcw } from 'lucide-react';
 import { TextOverlay } from '../../lib/text-overlay';
+import { ProgressBar, CircularProgress } from './ProgressBar';
+import { LoadingSpinner } from './LoadingSpinner';
+import { useLoadingState } from '../../lib/hooks/useLoadingState';
 
 // Interfaces for processing
 interface SubtitleSegment {

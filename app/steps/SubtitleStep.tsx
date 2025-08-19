@@ -5,6 +5,9 @@ import VideoPreview from "../components/VideoPreview";
 import Timeline from "../components/Timeline";
 import SubtitleEditor from "../components/SubtitleEditor";
 import TextOverlayManager from "../components/TextOverlayManager";
+import { ErrorBoundary } from "../components/ErrorBoundary";
+import { ErrorDisplay } from "../components/ErrorDisplay";
+import { useErrorHandler } from "../../lib/error-handling";
 import { useTextOverlays } from "../../lib/hooks/useTextOverlays";
 
 // State management interfaces for editor functionality
@@ -235,8 +238,8 @@ const extractVideoMetadata = async (videoUrl: string): Promise<VideoMetadata> =>
 export default function SubtitleStep({ onBack, clippedVideoUrl, originalVideoMetadata }: SubtitleStepProps) {
     const [videoMetadata, setVideoMetadata] = useState<VideoMetadata | null>(originalVideoMetadata || null);
     const [isLoadingMetadata, setIsLoadingMetadata] = useState(!originalVideoMetadata);
-    const [error, setError] = useState<string | null>(null);
     const [retrimProgress, setRetrimProgress] = useState<string | null>(null);
+    const { error, handleError, clearError, retry } = useErrorHandler();
 
     const {
         editorState,
@@ -258,12 +261,16 @@ export default function SubtitleStep({ onBack, clippedVideoUrl, originalVideoMet
                     setIsLoadingMetadata(false);
                 })
                 .catch((err) => {
-                    setError('Failed to load video metadata');
+                    handleError(err, 'system', () => {
+                        setIsLoadingMetadata(true);
+                        extractVideoMetadata(clippedVideoUrl)
+                            .then(setVideoMetadata)
+                            .finally(() => setIsLoadingMetadata(false));
+                    });
                     setIsLoadingMetadata(false);
-                    console.error('Video metadata extraction failed:', err);
                 });
         }
-    }, [clippedVideoUrl, originalVideoMetadata]);
+    }, [clippedVideoUrl, originalVideoMetadata, handleError]);
 
     // Handle retrim functionality
     const handleRetrim = async () => {
@@ -273,7 +280,7 @@ export default function SubtitleStep({ onBack, clippedVideoUrl, originalVideoMet
 
         setProcessing(true);
         setRetrimProgress('Preparing video for retrim...');
-        setError(null);
+        clearError();
 
         try {
             // Fetch the current video file
@@ -334,8 +341,7 @@ export default function SubtitleStep({ onBack, clippedVideoUrl, originalVideoMet
             alert(`Video successfully retrimmed!\nNew duration: ${trimDuration}s\nDownload started automatically.`);
 
         } catch (err) {
-            console.error('Retrim failed:', err);
-            setError(err instanceof Error ? err.message : 'Failed to retrim video');
+            handleError(err, 'processing', handleRetrim);
             setRetrimProgress(null);
             setProcessing(false);
         }
@@ -356,402 +362,400 @@ export default function SubtitleStep({ onBack, clippedVideoUrl, originalVideoMet
         return (
             <div className="space-y-4">
                 <h1 className="text-2xl font-bold">Step 2: Video Editor</h1>
-                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-                    <p>{error}</p>
-                    <button
-                        onClick={() => {
-                            setError(null);
-                            setRetrimProgress(null);
-                            setProcessing(false);
-                        }}
-                        className="mt-2 mr-2 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-                    >
-                        Try Again
-                    </button>
-                    <button
-                        onClick={onBack}
-                        className="mt-2 bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-                    >
-                        ← Back to Step 1
-                    </button>
-                </div>
+                <ErrorDisplay
+                    error={error}
+                    onRetry={retry}
+                    onDismiss={() => {
+                        clearError();
+                        setRetrimProgress(null);
+                        setProcessing(false);
+                    }}
+                />
+                <button
+                    onClick={onBack}
+                    className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+                >
+                    ← Back to Step 1
+                </button>
             </div>
         );
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold">Step 2: Video Editor</h1>
-                <button
-                    onClick={onBack}
-                    className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
-                >
-                    ← Back
-                </button>
-            </div>
-
-            {/* Video metadata display */}
-            {videoMetadata && (
-                <div className="bg-gray-100 p-4 rounded-lg">
-                    <h3 className="font-semibold mb-2">Video Information</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div>
-                            <span className="text-gray-600">Duration:</span>
-                            <div className="font-medium">{Math.round(videoMetadata.duration)}s</div>
-                        </div>
-                        <div>
-                            <span className="text-gray-600">Resolution:</span>
-                            <div className="font-medium">{videoMetadata.width}x{videoMetadata.height}</div>
-                        </div>
-                        <div>
-                            <span className="text-gray-600">Format:</span>
-                            <div className="font-medium">{videoMetadata.format.toUpperCase()}</div>
-                        </div>
-                        <div>
-                            <span className="text-gray-600">Validated Trim:</span>
-                            <div className="font-medium">
-                                {Math.round(validatedEditorState.trimBounds.start)}s - {Math.round(validatedEditorState.trimBounds.end)}s
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Retrim Progress Display */}
-            {retrimProgress && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                        <div>
-                            <div className="font-medium text-blue-800">Processing Video Retrim</div>
-                            <div className="text-sm text-blue-600">{retrimProgress}</div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Modular editor container - placeholder for future components */}
+        <ErrorBoundary onError={(error, errorInfo) => handleError(error, 'system')}>
             <div className="space-y-6">
-                {/* Video Preview Section */}
-                <div className="bg-white border rounded-lg p-4">
-                    <h3 className="font-semibold mb-3">Video Preview</h3>
-                    {videoMetadata && (
-                        <VideoPreview
-                            videoUrl={clippedVideoUrl}
-                            metadata={videoMetadata}
-                            trimBounds={editorState.trimBounds}
-                            textOverlays={editorState.textOverlays}
-                            subtitles={editorState.subtitles.flatMap(track => track.segments)}
-                            currentTime={editorState.previewTime}
-                            onTimeUpdate={setPreviewTime}
-                            onLoadedMetadata={(metadata) => setVideoMetadata(metadata)}
-                            onOverlayPositionChange={textOverlayManager.updateOverlayPosition}
-                            onOverlaySelect={textOverlayManager.selectOverlay}
-                            selectedOverlayId={textOverlayManager.selectedOverlayId}
-                        />
-                    )}
+                <div className="flex items-center justify-between">
+                    <h1 className="text-2xl font-bold">Step 2: Video Editor</h1>
+                    <button
+                        onClick={onBack}
+                        className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+                    >
+                        ← Back
+                    </button>
                 </div>
 
-                {/* Timeline and Trimming Controls Section */}
-                <div className="bg-white border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-semibold">Timeline & Trimming</h3>
-                        <div className="flex items-center gap-2">
-                            {trimControls.isValidating && (
-                                <div className="flex items-center gap-1 text-sm text-blue-600">
-                                    <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                                    <span>Validating...</span>
+                {/* Video metadata display */}
+                {videoMetadata && (
+                    <div className="bg-gray-100 p-4 rounded-lg">
+                        <h3 className="font-semibold mb-2">Video Information</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div>
+                                <span className="text-gray-600">Duration:</span>
+                                <div className="font-medium">{Math.round(videoMetadata.duration)}s</div>
+                            </div>
+                            <div>
+                                <span className="text-gray-600">Resolution:</span>
+                                <div className="font-medium">{videoMetadata.width}x{videoMetadata.height}</div>
+                            </div>
+                            <div>
+                                <span className="text-gray-600">Format:</span>
+                                <div className="font-medium">{videoMetadata.format.toUpperCase()}</div>
+                            </div>
+                            <div>
+                                <span className="text-gray-600">Validated Trim:</span>
+                                <div className="font-medium">
+                                    {Math.round(validatedEditorState.trimBounds.start)}s - {Math.round(validatedEditorState.trimBounds.end)}s
                                 </div>
-                            )}
-                            {!trimControls.isValid && !trimControls.isValidating && (
-                                <div className="flex items-center gap-1 text-sm text-red-600">
-                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                    </svg>
-                                    <span>Invalid trim bounds</span>
-                                </div>
-                            )}
-                            {trimControls.isValid && !trimControls.isValidating && (
-                                <div className="flex items-center gap-1 text-sm text-green-600">
-                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                    </svg>
-                                    <span>Valid</span>
-                                </div>
-                            )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Retrim Progress Display */}
+                {retrimProgress && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                            <div>
+                                <div className="font-medium text-blue-800">Processing Video Retrim</div>
+                                <div className="text-sm text-blue-600">{retrimProgress}</div>
+                            </div>
                         </div>
                     </div>
+                )}
 
-                    {/* Validation Errors */}
-                    {trimControls.validationErrors.length > 0 && (
-                        <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                            <div className="text-sm text-red-800">
-                                <div className="font-medium mb-1">Trim validation errors:</div>
-                                <ul className="list-disc list-inside space-y-1">
-                                    {trimControls.validationErrors.map((error, index) => (
-                                        <li key={index}>{error}</li>
-                                    ))}
-                                </ul>
-                            </div>
-                        </div>
-                    )}
-
-                    {videoMetadata && (
-                        <Timeline
-                            duration={videoMetadata.duration}
-                            trimBounds={editorState.trimBounds}
-                            onTrimChange={trimControls.updateTrimBounds}
-                            subtitles={editorState.subtitles.flatMap(track => track.segments)}
-                            textOverlays={editorState.textOverlays}
-                            currentTime={editorState.previewTime}
-                            onTimeSeek={setPreviewTime}
-                            videoUrl={clippedVideoUrl}
-                        />
-                    )}
-
-                    {/* Trim Controls Info */}
-                    <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                            <div>
-                                <span className="text-gray-600">Current Trim:</span>
-                                <div className="font-mono font-medium">
-                                    {Math.round(editorState.trimBounds.start * 100) / 100}s - {Math.round(editorState.trimBounds.end * 100) / 100}s
-                                </div>
-                            </div>
-                            <div>
-                                <span className="text-gray-600">Trim Duration:</span>
-                                <div className="font-mono font-medium">
-                                    {Math.round((editorState.trimBounds.end - editorState.trimBounds.start) * 100) / 100}s
-                                </div>
-                            </div>
-                            <div>
-                                <span className="text-gray-600">Status:</span>
-                                <div className={`font-medium ${trimControls.isValid ? 'text-green-600' : 'text-red-600'}`}>
-                                    {trimControls.isValidating ? 'Validating...' : trimControls.isValid ? 'Ready' : 'Invalid'}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Retrim Action Button */}
-                        {trimControls.isValid && (
-                            <div className="mt-3 pt-3 border-t border-gray-200">
-                                <div className="flex items-center justify-between">
-                                    <div className="text-sm text-gray-600">
-                                        Apply these trim bounds to create a new video clip
-                                    </div>
-                                    <button
-                                        onClick={handleRetrim}
-                                        disabled={editorState.isProcessing || !trimControls.isValid}
-                                        className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
-                                    >
-                                        {editorState.isProcessing ? 'Processing...' : 'Apply Trim'}
-                                    </button>
-                                </div>
-                            </div>
+                {/* Modular editor container - placeholder for future components */}
+                <div className="space-y-6">
+                    {/* Video Preview Section */}
+                    <div className="bg-white border rounded-lg p-4">
+                        <h3 className="font-semibold mb-3">Video Preview</h3>
+                        {videoMetadata && (
+                            <VideoPreview
+                                videoUrl={clippedVideoUrl}
+                                metadata={videoMetadata}
+                                trimBounds={editorState.trimBounds}
+                                textOverlays={editorState.textOverlays}
+                                subtitles={editorState.subtitles.flatMap(track => track.segments)}
+                                currentTime={editorState.previewTime}
+                                onTimeUpdate={setPreviewTime}
+                                onLoadedMetadata={(metadata) => setVideoMetadata(metadata)}
+                                onOverlayPositionChange={textOverlayManager.updateOverlayPosition}
+                                onOverlaySelect={textOverlayManager.selectOverlay}
+                                selectedOverlayId={textOverlayManager.selectedOverlayId}
+                            />
                         )}
                     </div>
-                </div>
 
-                {/* Subtitle Generation and Editing Section */}
-                <div className="bg-white border rounded-lg p-4">
-                    <SubtitleEditor
-                        subtitles={editorState.subtitles}
-                        onSubtitlesChange={updateSubtitles}
-                        currentTime={editorState.previewTime}
-                        onTimeSeek={setPreviewTime}
-                        videoDuration={videoMetadata?.duration || 0}
-                        isGenerating={false}
-                        onGenerateSubtitles={() => {
-                            // TODO: Implement subtitle generation
-                            console.log('Generate subtitles clicked');
-                        }}
-                    />
-                </div>
-
-                {/* Text Overlay Section */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Overlay List */}
+                    {/* Timeline and Trimming Controls Section */}
                     <div className="bg-white border rounded-lg p-4">
                         <div className="flex items-center justify-between mb-3">
-                            <h3 className="font-semibold">Text Overlays</h3>
+                            <h3 className="font-semibold">Timeline & Trimming</h3>
                             <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-600">
-                                    {textOverlayManager.getOverlayCount()} overlay{textOverlayManager.getOverlayCount() !== 1 ? 's' : ''}
-                                </span>
-                                {!textOverlayManager.isValid && (
+                                {trimControls.isValidating && (
+                                    <div className="flex items-center gap-1 text-sm text-blue-600">
+                                        <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                        <span>Validating...</span>
+                                    </div>
+                                )}
+                                {!trimControls.isValid && !trimControls.isValidating && (
                                     <div className="flex items-center gap-1 text-sm text-red-600">
                                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                                         </svg>
-                                        <span>Validation errors</span>
+                                        <span>Invalid trim bounds</span>
+                                    </div>
+                                )}
+                                {trimControls.isValid && !trimControls.isValidating && (
+                                    <div className="flex items-center gap-1 text-sm text-green-600">
+                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                        </svg>
+                                        <span>Valid</span>
                                     </div>
                                 )}
                             </div>
                         </div>
 
-                        {/* Add Overlay Button */}
-                        <div className="flex items-center justify-between mb-4">
-                            <button
-                                onClick={() => textOverlayManager.addOverlay({
-                                    text: 'New Text Overlay',
-                                    timing: { start: editorState.previewTime, end: editorState.previewTime + 5 }
-                                })}
-                                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-sm"
-                            >
-                                Add Text Overlay
-                            </button>
-
-                            {textOverlayManager.hasOverlays() && (
-                                <button
-                                    onClick={() => {
-                                        if (confirm('Are you sure you want to remove all text overlays?')) {
-                                            textOverlayManager.clearAllOverlays();
-                                        }
-                                    }}
-                                    className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 text-sm"
-                                >
-                                    Clear All
-                                </button>
-                            )}
-                        </div>
-
-                        {/* Overlay List */}
-                        {textOverlayManager.hasOverlays() ? (
-                            <div className="space-y-2 max-h-96 overflow-y-auto">
-                                {textOverlayManager.overlays.map((overlay, index) => (
-                                    <div
-                                        key={overlay.id}
-                                        className={`p-3 border rounded-lg cursor-pointer transition-colors ${textOverlayManager.selectedOverlayId === overlay.id
-                                                ? 'border-blue-500 bg-blue-50'
-                                                : 'border-gray-200 hover:border-gray-300'
-                                            }`}
-                                        onClick={() => textOverlayManager.selectOverlay(overlay.id)}
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm font-medium truncate">
-                                                        {overlay.text || 'Empty Text'}
-                                                    </span>
-                                                    {!overlay.visible && (
-                                                        <span className="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">
-                                                            Hidden
-                                                        </span>
-                                                    )}
-                                                    {textOverlayManager.validationErrors[overlay.id] && (
-                                                        <span className="text-xs text-red-600 bg-red-100 px-2 py-1 rounded">
-                                                            Error
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div className="text-xs text-gray-500 mt-1">
-                                                    {Math.round(overlay.timing.start * 100) / 100}s - {Math.round(overlay.timing.end * 100) / 100}s
-                                                    {' • '}
-                                                    Position: {Math.round(overlay.position.x * 100)}%, {Math.round(overlay.position.y * 100)}%
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-1 ml-2">
-                                                {/* Visibility Toggle */}
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        textOverlayManager.updateOverlayVisibility(overlay.id, !overlay.visible);
-                                                    }}
-                                                    className={`p-1 rounded text-xs ${overlay.visible
-                                                            ? 'text-gray-600 hover:text-gray-800'
-                                                            : 'text-gray-400 hover:text-gray-600'
-                                                        }`}
-                                                    title={overlay.visible ? 'Hide overlay' : 'Show overlay'}
-                                                >
-                                                    {overlay.visible ? '👁️' : '👁️‍🗨️'}
-                                                </button>
-
-                                                {/* Duplicate Button */}
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        textOverlayManager.duplicateOverlay(overlay.id);
-                                                    }}
-                                                    className="p-1 rounded text-xs text-gray-600 hover:text-gray-800"
-                                                    title="Duplicate overlay"
-                                                >
-                                                    📋
-                                                </button>
-
-                                                {/* Delete Button */}
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        if (confirm('Are you sure you want to delete this overlay?')) {
-                                                            textOverlayManager.removeOverlay(overlay.id);
-                                                        }
-                                                    }}
-                                                    className="p-1 rounded text-xs text-red-600 hover:text-red-800"
-                                                    title="Delete overlay"
-                                                >
-                                                    🗑️
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {/* Validation Errors */}
-                                        {textOverlayManager.validationErrors[overlay.id] && (
-                                            <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs">
-                                                <div className="font-medium text-red-800 mb-1">Validation Errors:</div>
-                                                <ul className="list-disc list-inside text-red-700 space-y-1">
-                                                    {textOverlayManager.validationErrors[overlay.id].map((error, errorIndex) => (
-                                                        <li key={errorIndex}>{error}</li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="bg-gray-100 h-32 rounded flex items-center justify-center">
-                                <div className="text-center">
-                                    <span className="text-gray-500 block mb-2">No text overlays added yet</span>
-                                    <span className="text-sm text-gray-400">Click "Add Text Overlay" to get started</span>
+                        {/* Validation Errors */}
+                        {trimControls.validationErrors.length > 0 && (
+                            <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                                <div className="text-sm text-red-800">
+                                    <div className="font-medium mb-1">Trim validation errors:</div>
+                                    <ul className="list-disc list-inside space-y-1">
+                                        {trimControls.validationErrors.map((error, index) => (
+                                            <li key={index}>{error}</li>
+                                        ))}
+                                    </ul>
                                 </div>
                             </div>
                         )}
-                    </div>
 
-                    {/* Text Overlay Editor */}
-                    <TextOverlayManager
-                        textOverlayManager={textOverlayManager}
-                        currentTime={editorState.previewTime}
-                        videoDuration={videoMetadata?.duration || 0}
-                        onTimeSeek={setPreviewTime}
-                    />
-                </div>
+                        {videoMetadata && (
+                            <Timeline
+                                duration={videoMetadata.duration}
+                                trimBounds={editorState.trimBounds}
+                                onTrimChange={trimControls.updateTrimBounds}
+                                subtitles={editorState.subtitles.flatMap(track => track.segments)}
+                                textOverlays={editorState.textOverlays}
+                                currentTime={editorState.previewTime}
+                                onTimeSeek={setPreviewTime}
+                                videoUrl={clippedVideoUrl}
+                            />
+                        )}
 
-                {/* Processing Section */}
-                <div className="bg-white border rounded-lg p-4">
-                    <h3 className="font-semibold mb-3">Final Processing</h3>
-                    <div className="flex items-center justify-between">
-                        <div className="flex flex-col">
-                            <span className="text-gray-600">
-                                {trimControls.isValid ? 'Ready to process your edited video' : 'Fix trim bounds validation errors to continue'}
-                            </span>
-                            {!trimControls.isValid && (
-                                <span className="text-sm text-red-600 mt-1">
-                                    Processing is disabled until trim bounds are valid
-                                </span>
+                        {/* Trim Controls Info */}
+                        <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                <div>
+                                    <span className="text-gray-600">Current Trim:</span>
+                                    <div className="font-mono font-medium">
+                                        {Math.round(editorState.trimBounds.start * 100) / 100}s - {Math.round(editorState.trimBounds.end * 100) / 100}s
+                                    </div>
+                                </div>
+                                <div>
+                                    <span className="text-gray-600">Trim Duration:</span>
+                                    <div className="font-mono font-medium">
+                                        {Math.round((editorState.trimBounds.end - editorState.trimBounds.start) * 100) / 100}s
+                                    </div>
+                                </div>
+                                <div>
+                                    <span className="text-gray-600">Status:</span>
+                                    <div className={`font-medium ${trimControls.isValid ? 'text-green-600' : 'text-red-600'}`}>
+                                        {trimControls.isValidating ? 'Validating...' : trimControls.isValid ? 'Ready' : 'Invalid'}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Retrim Action Button */}
+                            {trimControls.isValid && (
+                                <div className="mt-3 pt-3 border-t border-gray-200">
+                                    <div className="flex items-center justify-between">
+                                        <div className="text-sm text-gray-600">
+                                            Apply these trim bounds to create a new video clip
+                                        </div>
+                                        <button
+                                            onClick={handleRetrim}
+                                            disabled={editorState.isProcessing || !trimControls.isValid}
+                                            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
+                                        >
+                                            {editorState.isProcessing ? 'Processing...' : 'Apply Trim'}
+                                        </button>
+                                    </div>
+                                </div>
                             )}
                         </div>
-                        <button
-                            disabled={editorState.isProcessing || !trimControls.isValid || trimControls.isValidating}
-                            className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                        >
-                            {editorState.isProcessing ? 'Processing...' : 'Process Final Video'}
-                        </button>
+                    </div>
+
+                    {/* Subtitle Generation and Editing Section */}
+                    <div className="bg-white border rounded-lg p-4">
+                        <SubtitleEditor
+                            subtitles={editorState.subtitles}
+                            onSubtitlesChange={updateSubtitles}
+                            currentTime={editorState.previewTime}
+                            onTimeSeek={setPreviewTime}
+                            videoDuration={videoMetadata?.duration || 0}
+                            isGenerating={false}
+                            onGenerateSubtitles={() => {
+                                // TODO: Implement subtitle generation
+                                console.log('Generate subtitles clicked');
+                            }}
+                        />
+                    </div>
+
+                    {/* Text Overlay Section */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Overlay List */}
+                        <div className="bg-white border rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="font-semibold">Text Overlays</h3>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm text-gray-600">
+                                        {textOverlayManager.getOverlayCount()} overlay{textOverlayManager.getOverlayCount() !== 1 ? 's' : ''}
+                                    </span>
+                                    {!textOverlayManager.isValid && (
+                                        <div className="flex items-center gap-1 text-sm text-red-600">
+                                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                            </svg>
+                                            <span>Validation errors</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Add Overlay Button */}
+                            <div className="flex items-center justify-between mb-4">
+                                <button
+                                    onClick={() => textOverlayManager.addOverlay({
+                                        text: 'New Text Overlay',
+                                        timing: { start: editorState.previewTime, end: editorState.previewTime + 5 }
+                                    })}
+                                    className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-sm"
+                                >
+                                    Add Text Overlay
+                                </button>
+
+                                {textOverlayManager.hasOverlays() && (
+                                    <button
+                                        onClick={() => {
+                                            if (confirm('Are you sure you want to remove all text overlays?')) {
+                                                textOverlayManager.clearAllOverlays();
+                                            }
+                                        }}
+                                        className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 text-sm"
+                                    >
+                                        Clear All
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Overlay List */}
+                            {textOverlayManager.hasOverlays() ? (
+                                <div className="space-y-2 max-h-96 overflow-y-auto">
+                                    {textOverlayManager.overlays.map((overlay, index) => (
+                                        <div
+                                            key={overlay.id}
+                                            className={`p-3 border rounded-lg cursor-pointer transition-colors ${textOverlayManager.selectedOverlayId === overlay.id
+                                                ? 'border-blue-500 bg-blue-50'
+                                                : 'border-gray-200 hover:border-gray-300'
+                                                }`}
+                                            onClick={() => textOverlayManager.selectOverlay(overlay.id)}
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm font-medium truncate">
+                                                            {overlay.text || 'Empty Text'}
+                                                        </span>
+                                                        {!overlay.visible && (
+                                                            <span className="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">
+                                                                Hidden
+                                                            </span>
+                                                        )}
+                                                        {textOverlayManager.validationErrors[overlay.id] && (
+                                                            <span className="text-xs text-red-600 bg-red-100 px-2 py-1 rounded">
+                                                                Error
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 mt-1">
+                                                        {Math.round(overlay.timing.start * 100) / 100}s - {Math.round(overlay.timing.end * 100) / 100}s
+                                                        {' • '}
+                                                        Position: {Math.round(overlay.position.x * 100)}%, {Math.round(overlay.position.y * 100)}%
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-1 ml-2">
+                                                    {/* Visibility Toggle */}
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            textOverlayManager.updateOverlayVisibility(overlay.id, !overlay.visible);
+                                                        }}
+                                                        className={`p-1 rounded text-xs ${overlay.visible
+                                                            ? 'text-gray-600 hover:text-gray-800'
+                                                            : 'text-gray-400 hover:text-gray-600'
+                                                            }`}
+                                                        title={overlay.visible ? 'Hide overlay' : 'Show overlay'}
+                                                    >
+                                                        {overlay.visible ? '👁️' : '👁️‍🗨️'}
+                                                    </button>
+
+                                                    {/* Duplicate Button */}
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            textOverlayManager.duplicateOverlay(overlay.id);
+                                                        }}
+                                                        className="p-1 rounded text-xs text-gray-600 hover:text-gray-800"
+                                                        title="Duplicate overlay"
+                                                    >
+                                                        📋
+                                                    </button>
+
+                                                    {/* Delete Button */}
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (confirm('Are you sure you want to delete this overlay?')) {
+                                                                textOverlayManager.removeOverlay(overlay.id);
+                                                            }
+                                                        }}
+                                                        className="p-1 rounded text-xs text-red-600 hover:text-red-800"
+                                                        title="Delete overlay"
+                                                    >
+                                                        🗑️
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Validation Errors */}
+                                            {textOverlayManager.validationErrors[overlay.id] && (
+                                                <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs">
+                                                    <div className="font-medium text-red-800 mb-1">Validation Errors:</div>
+                                                    <ul className="list-disc list-inside text-red-700 space-y-1">
+                                                        {textOverlayManager.validationErrors[overlay.id].map((error, errorIndex) => (
+                                                            <li key={errorIndex}>{error}</li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="bg-gray-100 h-32 rounded flex items-center justify-center">
+                                    <div className="text-center">
+                                        <span className="text-gray-500 block mb-2">No text overlays added yet</span>
+                                        <span className="text-sm text-gray-400">Click "Add Text Overlay" to get started</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Text Overlay Editor */}
+                        <TextOverlayManager
+                            textOverlayManager={textOverlayManager}
+                            currentTime={editorState.previewTime}
+                            videoDuration={videoMetadata?.duration || 0}
+                            onTimeSeek={setPreviewTime}
+                        />
+                    </div>
+
+                    {/* Processing Section */}
+                    <div className="bg-white border rounded-lg p-4">
+                        <h3 className="font-semibold mb-3">Final Processing</h3>
+                        <div className="flex items-center justify-between">
+                            <div className="flex flex-col">
+                                <span className="text-gray-600">
+                                    {trimControls.isValid ? 'Ready to process your edited video' : 'Fix trim bounds validation errors to continue'}
+                                </span>
+                                {!trimControls.isValid && (
+                                    <span className="text-sm text-red-600 mt-1">
+                                        Processing is disabled until trim bounds are valid
+                                    </span>
+                                )}
+                            </div>
+                            <button
+                                disabled={editorState.isProcessing || !trimControls.isValid || trimControls.isValidating}
+                                className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                            >
+                                {editorState.isProcessing ? 'Processing...' : 'Process Final Video'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </ErrorBoundary>
     );
 }
