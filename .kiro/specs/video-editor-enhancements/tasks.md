@@ -23,16 +23,16 @@
     - Create unit tests for timeline interactions
     - _Requirements: 2.1, 2.2, 2.3, 5.1_
 
-- [ ] 3. Implement fine-tuned trimming controls
+- [x] 3. Implement fine-tuned trimming controls
 
-  - [ ] 3.1 Create trim control state management
+  - [x] 3.1 Create trim control state management
 
     - Implement trim bounds state with validation
     - Add real-time preview updates when markers are dragged
     - Create debounced updates to prevent excessive re-renders
     - _Requirements: 2.1, 2.2, 2.4_
 
-  - [ ] 3.2 Build trim processing API endpoint
+  - [x] 3.2 Build trim processing API endpoint
     - Create `/api/retrim` endpoint for fine-tuned video trimming
     - Implement FFmpeg integration for precise timestamp trimming
     - Add error handling and validation for trim parameters
