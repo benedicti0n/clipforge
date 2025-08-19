@@ -2,8 +2,22 @@
 
 import { useState } from "react";
 
+// Video metadata interface
+interface VideoMetadata {
+    duration: number;
+    width: number;
+    height: number;
+    format: string;
+}
+
+// Clipped video data interface
+interface ClippedVideoData {
+    url: string;
+    metadata?: VideoMetadata;
+}
+
 interface Props {
-    onNext: () => void;
+    onNext: (videoData: ClippedVideoData) => void;
 }
 
 export default function ClipStep({ onNext }: Props) {
@@ -94,7 +108,7 @@ export default function ClipStep({ onNext }: Props) {
                         Download
                     </a>
                     <button
-                        onClick={onNext}
+                        onClick={() => onNext({ url: clippedVideo })}
                         className="ml-2 bg-purple-500 text-white px-4 py-2 rounded"
                     >
                         Next →
