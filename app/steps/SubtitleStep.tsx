@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import VideoPreview from "../components/VideoPreview";
 import Timeline from "../components/Timeline";
+import SubtitleEditor from "../components/SubtitleEditor";
+import TextOverlayManager from "../components/TextOverlayManager";
+import { useTextOverlays } from "../../lib/hooks/useTextOverlays";
 
 // State management interfaces for editor functionality
 interface VideoMetadata {
@@ -24,21 +27,8 @@ interface SubtitleTrack {
     segments: SubtitleSegment[];
 }
 
-interface TextStyle {
-    fontSize: number;
-    fontFamily: string;
-    color: string;
-    backgroundColor?: string;
-    borderColor?: string;
-}
-
-interface TextOverlay {
-    id: string;
-    text: string;
-    position: { x: number; y: number };
-    style: TextStyle;
-    timing: { start: number; end: number };
-}
+// Import TextOverlay and TextStyle from the dedicated module
+import { TextOverlay, TextStyle } from "../../lib/text-overlay";
 
 interface EditorState {
     subtitles: SubtitleTrack[];
@@ -156,10 +146,9 @@ const useTrimControls = (initialBounds: { start: number; end: number }, duration
 
 // Custom hook for video editor state management
 const useVideoEditor = (initialMetadata: VideoMetadata) => {
-    const [editorState, setEditorState] = useState<EditorState>({
+    const [editorState, setEditorState] = useState<Omit<EditorState, 'textOverlays'>>({
         subtitles: [],
         trimBounds: { start: 0, end: initialMetadata.duration },
-        textOverlays: [],
         isProcessing: false,
         previewTime: 0,
     });
@@ -169,6 +158,17 @@ const useVideoEditor = (initialMetadata: VideoMetadata) => {
         { start: 0, end: initialMetadata.duration },
         initialMetadata.duration
     );
+
+    // Initialize text overlay management
+    const textOverlayManager = useTextOverlays({
+        videoDuration: initialMetadata.duration,
+        videoWidth: initialMetadata.width,
+        videoHeight: initialMetadata.height,
+        onValidationChange: (isValid, errors) => {
+            // Handle text overlay validation changes
+            console.log('Text overlay validation:', { isValid, errors });
+        }
+    });
 
     // Update editor state when validated trim bounds change
     useEffect(() => {
@@ -182,10 +182,6 @@ const useVideoEditor = (initialMetadata: VideoMetadata) => {
         setEditorState(prev => ({ ...prev, subtitles }));
     };
 
-    const updateTextOverlays = (textOverlays: TextOverlay[]) => {
-        setEditorState(prev => ({ ...prev, textOverlays }));
-    };
-
     const setProcessing = (isProcessing: boolean) => {
         setEditorState(prev => ({ ...prev, isProcessing }));
     };
@@ -197,12 +193,16 @@ const useVideoEditor = (initialMetadata: VideoMetadata) => {
     return {
         editorState: {
             ...editorState,
-            trimBounds: trimControls.trimBounds // Use real-time bounds for preview
+            trimBounds: trimControls.trimBounds, // Use real-time bounds for preview
+            textOverlays: textOverlayManager.overlays // Include text overlays from manager
         },
-        validatedEditorState: editorState, // Use validated bounds for processing
+        validatedEditorState: {
+            ...editorState,
+            textOverlays: textOverlayManager.overlays // Use validated bounds for processing
+        },
         trimControls,
+        textOverlayManager,
         updateSubtitles,
-        updateTextOverlays,
         setProcessing,
         setPreviewTime,
     };
@@ -242,8 +242,8 @@ export default function SubtitleStep({ onBack, clippedVideoUrl, originalVideoMet
         editorState,
         validatedEditorState,
         trimControls,
+        textOverlayManager,
         updateSubtitles,
-        updateTextOverlays,
         setProcessing,
         setPreviewTime,
     } = useVideoEditor(videoMetadata || { duration: 0, width: 1920, height: 1080, format: 'mp4' });
@@ -446,6 +446,9 @@ export default function SubtitleStep({ onBack, clippedVideoUrl, originalVideoMet
                             currentTime={editorState.previewTime}
                             onTimeUpdate={setPreviewTime}
                             onLoadedMetadata={(metadata) => setVideoMetadata(metadata)}
+                            onOverlayPositionChange={textOverlayManager.updateOverlayPosition}
+                            onOverlaySelect={textOverlayManager.selectOverlay}
+                            selectedOverlayId={textOverlayManager.selectedOverlayId}
                         />
                     )}
                 </div>
@@ -550,20 +553,180 @@ export default function SubtitleStep({ onBack, clippedVideoUrl, originalVideoMet
                     </div>
                 </div>
 
-                {/* Subtitle Generation Section */}
+                {/* Subtitle Generation and Editing Section */}
                 <div className="bg-white border rounded-lg p-4">
-                    <h3 className="font-semibold mb-3">Subtitles</h3>
-                    <div className="bg-gray-100 h-32 rounded flex items-center justify-center">
-                        <span className="text-gray-500">Subtitle generation and editing will be implemented here</span>
-                    </div>
+                    <SubtitleEditor
+                        subtitles={editorState.subtitles}
+                        onSubtitlesChange={updateSubtitles}
+                        currentTime={editorState.previewTime}
+                        onTimeSeek={setPreviewTime}
+                        videoDuration={videoMetadata?.duration || 0}
+                        isGenerating={false}
+                        onGenerateSubtitles={() => {
+                            // TODO: Implement subtitle generation
+                            console.log('Generate subtitles clicked');
+                        }}
+                    />
                 </div>
 
                 {/* Text Overlay Section */}
-                <div className="bg-white border rounded-lg p-4">
-                    <h3 className="font-semibold mb-3">Text Overlays</h3>
-                    <div className="bg-gray-100 h-32 rounded flex items-center justify-center">
-                        <span className="text-gray-500">Text overlay management will be implemented here</span>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Overlay List */}
+                    <div className="bg-white border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="font-semibold">Text Overlays</h3>
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-600">
+                                    {textOverlayManager.getOverlayCount()} overlay{textOverlayManager.getOverlayCount() !== 1 ? 's' : ''}
+                                </span>
+                                {!textOverlayManager.isValid && (
+                                    <div className="flex items-center gap-1 text-sm text-red-600">
+                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                        <span>Validation errors</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Add Overlay Button */}
+                        <div className="flex items-center justify-between mb-4">
+                            <button
+                                onClick={() => textOverlayManager.addOverlay({
+                                    text: 'New Text Overlay',
+                                    timing: { start: editorState.previewTime, end: editorState.previewTime + 5 }
+                                })}
+                                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-sm"
+                            >
+                                Add Text Overlay
+                            </button>
+
+                            {textOverlayManager.hasOverlays() && (
+                                <button
+                                    onClick={() => {
+                                        if (confirm('Are you sure you want to remove all text overlays?')) {
+                                            textOverlayManager.clearAllOverlays();
+                                        }
+                                    }}
+                                    className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 text-sm"
+                                >
+                                    Clear All
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Overlay List */}
+                        {textOverlayManager.hasOverlays() ? (
+                            <div className="space-y-2 max-h-96 overflow-y-auto">
+                                {textOverlayManager.overlays.map((overlay, index) => (
+                                    <div
+                                        key={overlay.id}
+                                        className={`p-3 border rounded-lg cursor-pointer transition-colors ${textOverlayManager.selectedOverlayId === overlay.id
+                                                ? 'border-blue-500 bg-blue-50'
+                                                : 'border-gray-200 hover:border-gray-300'
+                                            }`}
+                                        onClick={() => textOverlayManager.selectOverlay(overlay.id)}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-medium truncate">
+                                                        {overlay.text || 'Empty Text'}
+                                                    </span>
+                                                    {!overlay.visible && (
+                                                        <span className="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">
+                                                            Hidden
+                                                        </span>
+                                                    )}
+                                                    {textOverlayManager.validationErrors[overlay.id] && (
+                                                        <span className="text-xs text-red-600 bg-red-100 px-2 py-1 rounded">
+                                                            Error
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-xs text-gray-500 mt-1">
+                                                    {Math.round(overlay.timing.start * 100) / 100}s - {Math.round(overlay.timing.end * 100) / 100}s
+                                                    {' • '}
+                                                    Position: {Math.round(overlay.position.x * 100)}%, {Math.round(overlay.position.y * 100)}%
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-1 ml-2">
+                                                {/* Visibility Toggle */}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        textOverlayManager.updateOverlayVisibility(overlay.id, !overlay.visible);
+                                                    }}
+                                                    className={`p-1 rounded text-xs ${overlay.visible
+                                                            ? 'text-gray-600 hover:text-gray-800'
+                                                            : 'text-gray-400 hover:text-gray-600'
+                                                        }`}
+                                                    title={overlay.visible ? 'Hide overlay' : 'Show overlay'}
+                                                >
+                                                    {overlay.visible ? '👁️' : '👁️‍🗨️'}
+                                                </button>
+
+                                                {/* Duplicate Button */}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        textOverlayManager.duplicateOverlay(overlay.id);
+                                                    }}
+                                                    className="p-1 rounded text-xs text-gray-600 hover:text-gray-800"
+                                                    title="Duplicate overlay"
+                                                >
+                                                    📋
+                                                </button>
+
+                                                {/* Delete Button */}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (confirm('Are you sure you want to delete this overlay?')) {
+                                                            textOverlayManager.removeOverlay(overlay.id);
+                                                        }
+                                                    }}
+                                                    className="p-1 rounded text-xs text-red-600 hover:text-red-800"
+                                                    title="Delete overlay"
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Validation Errors */}
+                                        {textOverlayManager.validationErrors[overlay.id] && (
+                                            <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs">
+                                                <div className="font-medium text-red-800 mb-1">Validation Errors:</div>
+                                                <ul className="list-disc list-inside text-red-700 space-y-1">
+                                                    {textOverlayManager.validationErrors[overlay.id].map((error, errorIndex) => (
+                                                        <li key={errorIndex}>{error}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="bg-gray-100 h-32 rounded flex items-center justify-center">
+                                <div className="text-center">
+                                    <span className="text-gray-500 block mb-2">No text overlays added yet</span>
+                                    <span className="text-sm text-gray-400">Click "Add Text Overlay" to get started</span>
+                                </div>
+                            </div>
+                        )}
                     </div>
+
+                    {/* Text Overlay Editor */}
+                    <TextOverlayManager
+                        textOverlayManager={textOverlayManager}
+                        currentTime={editorState.previewTime}
+                        videoDuration={videoMetadata?.duration || 0}
+                        onTimeSeek={setPreviewTime}
+                    />
                 </div>
 
                 {/* Processing Section */}

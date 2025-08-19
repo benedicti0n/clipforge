@@ -39,9 +39,9 @@
     - Write unit tests for trim processing logic
     - _Requirements: 2.5, 6.1, 6.4_
 
-- [ ] 4. Set up local Whisper integration for subtitle generation
+- [x] 4. Set up local Whisper integration for subtitle generation
 
-  - [ ] 4.1 Create audio extraction utilities
+  - [x] 4.1 Create audio extraction utilities
 
     - Implement FFmpeg audio extraction for Whisper input
     - Create utility functions for audio format conversion
@@ -49,7 +49,7 @@
     - Write unit tests for audio extraction functions
     - _Requirements: 1.2, 6.1_
 
-  - [ ] 4.2 Build Whisper subprocess integration
+  - [x] 4.2 Build Whisper subprocess integration
 
     - Create Node.js subprocess wrapper for Whisper execution
     - Implement JSON output parsing for subtitle segments
@@ -57,16 +57,16 @@
     - Create progress tracking for subtitle generation
     - _Requirements: 1.1, 1.2, 1.5, 5.4_
 
-  - [ ] 4.3 Create subtitle generation API endpoint
+  - [x] 4.3 Create subtitle generation API endpoint
     - Build `/api/generate-subtitles` endpoint with Whisper integration
     - Implement audio extraction and Whisper processing pipeline
     - Add validation and error handling for subtitle generation
     - Write integration tests for complete subtitle generation flow
     - _Requirements: 1.1, 1.2, 1.5_
 
-- [ ] 5. Build subtitle editing interface
+- [x] 5. Build subtitle editing interface
 
-  - [ ] 5.1 Create subtitle display and editing components
+  - [x] 5.1 Create subtitle display and editing components
 
     - Build SubtitleEditor component with editable subtitle segments
     - Implement subtitle timing adjustment controls
@@ -74,22 +74,22 @@
     - Create unit tests for subtitle editing functionality
     - _Requirements: 1.3, 1.4, 4.2_
 
-  - [ ] 5.2 Implement subtitle synchronization with video
+  - [x] 5.2 Implement subtitle synchronization with video
     - Add subtitle highlighting synchronized with video playback
     - Implement click-to-seek functionality from subtitle segments
     - Create visual indicators for subtitle timing on timeline
     - _Requirements: 1.4, 4.2, 5.2_
 
-- [ ] 6. Implement text overlay system
+- [x] 6. Implement text overlay system
 
-  - [ ] 6.1 Create text overlay data models and state management
+  - [x] 6.1 Create text overlay data models and state management
 
     - Define TextOverlay interfaces and validation
     - Implement overlay state management with CRUD operations
     - Add overlay timing and positioning validation
     - _Requirements: 3.1, 3.4_
 
-  - [ ] 6.2 Build text overlay canvas rendering
+  - [x] 6.2 Build text overlay canvas rendering
 
     - Create canvas-based overlay rendering system
     - Implement real-time text overlay preview on video
@@ -97,7 +97,7 @@
     - Write unit tests for canvas rendering functions
     - _Requirements: 3.2, 3.3, 4.2, 5.2_
 
-  - [ ] 6.3 Create text overlay editing controls
+  - [x] 6.3 Create text overlay editing controls
     - Build TextOverlayManager component with styling options
     - Implement font, color, and size customization controls
     - Add overlay timing controls with timeline integration

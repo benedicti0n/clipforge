@@ -56,6 +56,8 @@ export default function Timeline({
     const [isDragging, setIsDragging] = useState<'start' | 'end' | 'playhead' | null>(null);
     const [waveformData, setWaveformData] = useState<number[]>([]);
     const [isLoadingWaveform, setIsLoadingWaveform] = useState(false);
+    const [hoveredSubtitle, setHoveredSubtitle] = useState<number | null>(null);
+    const [cursorStyle, setCursorStyle] = useState<string>('pointer');
 
     const TIMELINE_HEIGHT = 80;
     const MARKER_WIDTH = 12;
@@ -153,13 +155,64 @@ export default function Timeline({
         ctx.fillStyle = 'rgba(59, 130, 246, 0.3)';
         ctx.fillRect(startX, 0, endX - startX, height);
 
-        // Draw subtitle segments
-        subtitles.forEach(subtitle => {
+        // Draw subtitle segments with enhanced visibility
+        subtitles.forEach((subtitle, index) => {
             const segmentStartX = timeToPixel(subtitle.start, width);
             const segmentEndX = timeToPixel(subtitle.end, width);
+            const segmentWidth = segmentEndX - segmentStartX;
 
-            ctx.fillStyle = 'rgba(34, 197, 94, 0.6)';
-            ctx.fillRect(segmentStartX, height - 8, segmentEndX - segmentStartX, 4);
+            // Check if this subtitle is currently active or hovered
+            const isActive = currentTime >= subtitle.start && currentTime <= subtitle.end;
+            const isHovered = hoveredSubtitle === index;
+
+            // Draw subtitle background with different states
+            if (isActive) {
+                ctx.fillStyle = 'rgba(34, 197, 94, 0.9)';
+            } else if (isHovered) {
+                ctx.fillStyle = 'rgba(34, 197, 94, 0.8)';
+            } else {
+                ctx.fillStyle = 'rgba(34, 197, 94, 0.6)';
+            }
+            ctx.fillRect(segmentStartX, height - 12, segmentWidth, 8);
+
+            // Draw subtitle border for better visibility
+            ctx.strokeStyle = isActive ? '#16a34a' : isHovered ? '#16a34a' : '#22c55e';
+            ctx.lineWidth = isActive || isHovered ? 2 : 1;
+            ctx.strokeRect(segmentStartX, height - 12, segmentWidth, 8);
+
+            // Add subtitle index label for segments wider than 20px
+            if (segmentWidth > 20) {
+                ctx.fillStyle = 'white';
+                ctx.font = isActive || isHovered ? 'bold 8px Arial' : '8px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(
+                    (index + 1).toString(),
+                    segmentStartX + segmentWidth / 2,
+                    height - 6
+                );
+            }
+
+            // Add tooltip-like text for hovered subtitle
+            if (isHovered && subtitle.text) {
+                const tooltipText = subtitle.text.length > 30
+                    ? subtitle.text.substring(0, 30) + '...'
+                    : subtitle.text;
+
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'left';
+
+                const textWidth = ctx.measureText(tooltipText).width;
+                const tooltipX = Math.min(segmentStartX, width - textWidth - 10);
+                const tooltipY = height - 20;
+
+                // Draw tooltip background
+                ctx.fillRect(tooltipX - 4, tooltipY - 12, textWidth + 8, 16);
+
+                // Draw tooltip text
+                ctx.fillStyle = 'white';
+                ctx.fillText(tooltipText, tooltipX, tooltipY);
+            }
         });
 
         // Draw text overlay segments
@@ -211,7 +264,7 @@ export default function Timeline({
         ctx.arc(playheadX, 8, 6, 0, 2 * Math.PI);
         ctx.fill();
 
-    }, [waveformData, trimBounds, subtitles, textOverlays, currentTime, timeToPixel, duration]);
+    }, [waveformData, trimBounds, subtitles, textOverlays, currentTime, timeToPixel, duration, hoveredSubtitle]);
 
     // Redraw timeline when dependencies change
     useEffect(() => {
@@ -225,7 +278,9 @@ export default function Timeline({
 
         const rect = canvas.getBoundingClientRect();
         const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
         const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
 
         const startX = timeToPixel(trimBounds.start, canvasWidth);
         const endX = timeToPixel(trimBounds.end, canvasWidth);
@@ -243,31 +298,85 @@ export default function Timeline({
         else if (Math.abs(x - playheadX) <= 10) {
             setIsDragging('playhead');
         }
+        // Check if clicking on subtitle segments (bottom area)
+        else if (y > canvasHeight - 12) {
+            const clickedTime = pixelToTime(x, canvasWidth);
+
+            // Find subtitle segment at clicked position
+            const clickedSubtitle = subtitles.find(subtitle =>
+                clickedTime >= subtitle.start && clickedTime <= subtitle.end
+            );
+
+            if (clickedSubtitle) {
+                // Seek to start of subtitle segment
+                onTimeSeek?.(clickedSubtitle.start);
+            } else {
+                // No subtitle found, seek to clicked position
+                onTimeSeek?.(Math.max(0, Math.min(duration, clickedTime)));
+            }
+        }
         // Otherwise, seek to clicked position
         else {
             const clickedTime = pixelToTime(x, canvasWidth);
             onTimeSeek?.(Math.max(0, Math.min(duration, clickedTime)));
         }
-    }, [trimBounds, currentTime, timeToPixel, pixelToTime, duration, onTimeSeek]);
+    }, [trimBounds, currentTime, timeToPixel, pixelToTime, duration, onTimeSeek, subtitles]);
 
     const handleMouseMove = useCallback((event: React.MouseEvent) => {
-        if (!isDragging || !canvasRef.current) return;
+        const canvas = canvasRef.current;
+        if (!canvas) return;
 
-        const rect = canvasRef.current.getBoundingClientRect();
+        const rect = canvas.getBoundingClientRect();
         const x = event.clientX - rect.left;
-        const canvasWidth = canvasRef.current.width;
-        const newTime = Math.max(0, Math.min(duration, pixelToTime(x, canvasWidth)));
+        const y = event.clientY - rect.top;
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
 
-        if (isDragging === 'start') {
-            const newStart = Math.min(newTime, trimBounds.end - 0.1);
-            onTrimChange({ start: newStart, end: trimBounds.end });
-        } else if (isDragging === 'end') {
-            const newEnd = Math.max(newTime, trimBounds.start + 0.1);
-            onTrimChange({ start: trimBounds.start, end: newEnd });
-        } else if (isDragging === 'playhead') {
-            onTimeSeek?.(newTime);
+        if (isDragging) {
+            const newTime = Math.max(0, Math.min(duration, pixelToTime(x, canvasWidth)));
+
+            if (isDragging === 'start') {
+                const newStart = Math.min(newTime, trimBounds.end - 0.1);
+                onTrimChange({ start: newStart, end: trimBounds.end });
+            } else if (isDragging === 'end') {
+                const newEnd = Math.max(newTime, trimBounds.start + 0.1);
+                onTrimChange({ start: trimBounds.start, end: newEnd });
+            } else if (isDragging === 'playhead') {
+                onTimeSeek?.(newTime);
+            }
+        } else {
+            // Handle hover effects when not dragging
+            const startX = timeToPixel(trimBounds.start, canvasWidth);
+            const endX = timeToPixel(trimBounds.end, canvasWidth);
+            const playheadX = timeToPixel(currentTime, canvasWidth);
+
+            // Check what's being hovered
+            if (Math.abs(x - startX) <= MARKER_WIDTH / 2 || Math.abs(x - endX) <= MARKER_WIDTH / 2) {
+                setCursorStyle('ew-resize');
+                setHoveredSubtitle(null);
+            } else if (Math.abs(x - playheadX) <= 10) {
+                setCursorStyle('ew-resize');
+                setHoveredSubtitle(null);
+            } else if (y > canvasHeight - 12) {
+                // Check if hovering over subtitle segments
+                const hoveredTime = pixelToTime(x, canvasWidth);
+                const hoveredSubtitleIndex = subtitles.findIndex(subtitle =>
+                    hoveredTime >= subtitle.start && hoveredTime <= subtitle.end
+                );
+
+                if (hoveredSubtitleIndex !== -1) {
+                    setCursorStyle('pointer');
+                    setHoveredSubtitle(hoveredSubtitleIndex);
+                } else {
+                    setCursorStyle('pointer');
+                    setHoveredSubtitle(null);
+                }
+            } else {
+                setCursorStyle('pointer');
+                setHoveredSubtitle(null);
+            }
         }
-    }, [isDragging, trimBounds, duration, pixelToTime, onTrimChange, onTimeSeek]);
+    }, [isDragging, trimBounds, duration, pixelToTime, onTrimChange, onTimeSeek, currentTime, timeToPixel, subtitles]);
 
     const handleMouseUp = useCallback(() => {
         setIsDragging(null);
@@ -332,15 +441,19 @@ export default function Timeline({
             {/* Timeline Canvas */}
             <div
                 ref={containerRef}
-                className="relative bg-white border rounded-lg overflow-hidden cursor-pointer"
-                style={{ height: TIMELINE_HEIGHT }}
+                className="relative bg-white border rounded-lg overflow-hidden"
+                style={{ height: TIMELINE_HEIGHT, cursor: cursorStyle }}
             >
                 <canvas
                     ref={canvasRef}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
-                    onMouseLeave={handleMouseUp}
+                    onMouseLeave={() => {
+                        handleMouseUp();
+                        setHoveredSubtitle(null);
+                        setCursorStyle('pointer');
+                    }}
                     className="w-full h-full"
                 />
             </div>

@@ -1,6 +1,13 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback } from "react";
+import {
+    renderCanvasOverlays,
+    findOverlayAtPoint,
+    isPointInOverlayBounds,
+    clearTextMeasurementCache
+} from "../../lib/canvas-overlay-renderer";
+import { TextOverlay, pixelsToNormalized } from "../../lib/text-overlay";
 
 interface VideoMetadata {
     duration: number;
@@ -9,19 +16,7 @@ interface VideoMetadata {
     format: string;
 }
 
-interface TextOverlay {
-    id: string;
-    text: string;
-    position: { x: number; y: number };
-    style: {
-        fontSize: number;
-        fontFamily: string;
-        color: string;
-        backgroundColor?: string;
-        borderColor?: string;
-    };
-    timing: { start: number; end: number };
-}
+// TextOverlay interface is now imported from the dedicated module
 
 interface SubtitleSegment {
     start: number;
@@ -39,6 +34,9 @@ interface VideoPreviewProps {
     currentTime?: number;
     onTimeUpdate?: (time: number) => void;
     onLoadedMetadata?: (metadata: VideoMetadata) => void;
+    onOverlayPositionChange?: (overlayId: string, position: { x: number; y: number }) => void;
+    onOverlaySelect?: (overlayId: string | null) => void;
+    selectedOverlayId?: string | null;
 }
 
 export default function VideoPreview({
@@ -49,13 +47,23 @@ export default function VideoPreview({
     subtitles = [],
     currentTime = 0,
     onTimeUpdate,
-    onLoadedMetadata
+    onLoadedMetadata,
+    onOverlayPositionChange,
+    onOverlaySelect,
+    selectedOverlayId
 }: VideoPreviewProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [videoCurrentTime, setVideoCurrentTime] = useState(0);
     const [error, setError] = useState<string | null>(null);
+
+    // Drag and drop state
+    const [isDragging, setIsDragging] = useState(false);
+    const [draggedOverlayId, setDraggedOverlayId] = useState<string | null>(null);
+    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+    const [renderedOverlays, setRenderedOverlays] = useState<Array<{ overlay: TextOverlay; bounds: { x: number; y: number; width: number; height: number } }>>([]);
 
     // Update video time when currentTime prop changes
     useEffect(() => {
@@ -93,88 +101,29 @@ export default function VideoPreview({
         }
     }, [metadata.format, onLoadedMetadata]);
 
-    // Render overlays on canvas
+    // Render overlays on canvas using the enhanced rendering system
     const renderOverlays = useCallback(() => {
         const canvas = canvasRef.current;
         const video = videoRef.current;
 
-        if (!canvas || !video) return;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        // Clear canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (!canvas || !video || !video.videoWidth || !video.videoHeight) return;
 
         const currentVideoTime = video.currentTime;
 
-        // Render text overlays
-        textOverlays.forEach(overlay => {
-            if (currentVideoTime >= overlay.timing.start && currentVideoTime <= overlay.timing.end) {
-                ctx.save();
-
-                // Set text style
-                ctx.font = `${overlay.style.fontSize}px ${overlay.style.fontFamily}`;
-                ctx.fillStyle = overlay.style.color;
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'top';
-
-                // Draw background if specified
-                if (overlay.style.backgroundColor) {
-                    const textMetrics = ctx.measureText(overlay.text);
-                    const textHeight = overlay.style.fontSize;
-
-                    ctx.fillStyle = overlay.style.backgroundColor;
-                    ctx.fillRect(
-                        overlay.position.x - 4,
-                        overlay.position.y - 4,
-                        textMetrics.width + 8,
-                        textHeight + 8
-                    );
-                }
-
-                // Draw border if specified
-                if (overlay.style.borderColor) {
-                    ctx.strokeStyle = overlay.style.borderColor;
-                    ctx.lineWidth = 2;
-                    ctx.strokeText(overlay.text, overlay.position.x, overlay.position.y);
-                }
-
-                // Draw text
-                ctx.fillStyle = overlay.style.color;
-                ctx.fillText(overlay.text, overlay.position.x, overlay.position.y);
-
-                ctx.restore();
-            }
-        });
-
-        // Render subtitles
-        const currentSubtitle = subtitles.find(
-            sub => currentVideoTime >= sub.start && currentVideoTime <= sub.end
+        // Use the enhanced canvas rendering system
+        const rendered = renderCanvasOverlays(
+            {
+                canvas,
+                videoWidth: video.videoWidth,
+                videoHeight: video.videoHeight,
+                currentTime: currentVideoTime,
+                devicePixelRatio: window.devicePixelRatio || 1
+            },
+            textOverlays,
+            subtitles
         );
 
-        if (currentSubtitle) {
-            ctx.save();
-
-            // Subtitle styling
-            const fontSize = Math.max(16, canvas.width * 0.03);
-            ctx.font = `${fontSize}px Arial, sans-serif`;
-            ctx.fillStyle = 'white';
-            ctx.strokeStyle = 'black';
-            ctx.lineWidth = 2;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'bottom';
-
-            // Position at bottom center
-            const x = canvas.width / 2;
-            const y = canvas.height - 20;
-
-            // Draw subtitle with outline
-            ctx.strokeText(currentSubtitle.text, x, y);
-            ctx.fillText(currentSubtitle.text, x, y);
-
-            ctx.restore();
-        }
+        setRenderedOverlays(rendered);
     }, [textOverlays, subtitles]);
 
     // Update canvas overlays when video time changes
@@ -182,14 +131,108 @@ export default function VideoPreview({
         renderOverlays();
     }, [videoCurrentTime, renderOverlays]);
 
-    // Set up canvas dimensions to match video
+    // Mouse event handlers for drag and drop
+    const getMousePosition = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return { x: 0, y: 0 };
+
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top
+        };
+    }, []);
+
+    const handleMouseDown = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
+        const mousePos = getMousePosition(event);
+        const clickedOverlay = findOverlayAtPoint(mousePos, renderedOverlays);
+
+        if (clickedOverlay) {
+            setIsDragging(true);
+            setDraggedOverlayId(clickedOverlay.id);
+
+            // Calculate offset from overlay position to mouse position
+            const overlayBounds = renderedOverlays.find(r => r.overlay.id === clickedOverlay.id)?.bounds;
+            if (overlayBounds) {
+                setDragOffset({
+                    x: mousePos.x - overlayBounds.x,
+                    y: mousePos.y - overlayBounds.y
+                });
+            }
+
+            // Select the overlay
+            onOverlaySelect?.(clickedOverlay.id);
+
+            event.preventDefault();
+        } else {
+            // Clicked on empty area, deselect
+            onOverlaySelect?.(null);
+        }
+    }, [renderedOverlays, getMousePosition, onOverlaySelect]);
+
+    const handleMouseMove = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
+        if (!isDragging || !draggedOverlayId || !videoRef.current) return;
+
+        const mousePos = getMousePosition(event);
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        // Calculate new position accounting for drag offset
+        const newCanvasX = mousePos.x - dragOffset.x;
+        const newCanvasY = mousePos.y - dragOffset.y;
+
+        // Convert canvas coordinates to video coordinates
+        const video = videoRef.current;
+        const displayWidth = canvas.clientWidth;
+        const displayHeight = canvas.clientHeight;
+
+        const scaleX = displayWidth / video.videoWidth;
+        const scaleY = displayHeight / video.videoHeight;
+        const scaleFactor = Math.min(scaleX, scaleY);
+
+        const scaledVideoWidth = video.videoWidth * scaleFactor;
+        const scaledVideoHeight = video.videoHeight * scaleFactor;
+        const offsetX = (displayWidth - scaledVideoWidth) / 2;
+        const offsetY = (displayHeight - scaledVideoHeight) / 2;
+
+        // Convert to video coordinates
+        const videoX = (newCanvasX - offsetX) / scaleFactor;
+        const videoY = (newCanvasY - offsetY) / scaleFactor;
+
+        // Convert to normalized coordinates
+        const normalizedPosition = pixelsToNormalized(
+            { x: videoX, y: videoY },
+            video.videoWidth,
+            video.videoHeight
+        );
+
+        // Update overlay position
+        onOverlayPositionChange?.(draggedOverlayId, normalizedPosition);
+
+        event.preventDefault();
+    }, [isDragging, draggedOverlayId, dragOffset, getMousePosition, onOverlayPositionChange]);
+
+    const handleMouseUp = useCallback(() => {
+        setIsDragging(false);
+        setDraggedOverlayId(null);
+        setDragOffset({ x: 0, y: 0 });
+    }, []);
+
+    // Add global mouse up listener for drag operations
+    useEffect(() => {
+        if (isDragging) {
+            const handleGlobalMouseUp = () => handleMouseUp();
+            document.addEventListener('mouseup', handleGlobalMouseUp);
+            return () => document.removeEventListener('mouseup', handleGlobalMouseUp);
+        }
+    }, [isDragging, handleMouseUp]);
+
+    // Set up canvas dimensions and clear cache when metadata changes
     useEffect(() => {
         const canvas = canvasRef.current;
-        const video = videoRef.current;
-
-        if (canvas && video && video.videoWidth && video.videoHeight) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
+        if (canvas) {
+            // Clear text measurement cache when video changes
+            clearTextMeasurementCache();
         }
     }, [metadata]);
 
@@ -220,7 +263,7 @@ export default function VideoPreview({
     return (
         <div className="space-y-4">
             {/* Video Container */}
-            <div className="relative bg-black rounded-lg overflow-hidden">
+            <div ref={containerRef} className="relative bg-black rounded-lg overflow-hidden">
                 <video
                     ref={videoRef}
                     src={videoUrl}
@@ -233,17 +276,34 @@ export default function VideoPreview({
                     preload="metadata"
                 />
 
-                {/* Overlay Canvas */}
+                {/* Interactive Overlay Canvas */}
                 <canvas
                     ref={canvasRef}
-                    className="absolute top-0 left-0 w-full h-full pointer-events-none"
+                    className={`absolute top-0 left-0 w-full h-full ${isDragging ? 'cursor-grabbing' : 'cursor-pointer'}`}
                     style={{ objectFit: 'contain' }}
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
                 />
 
                 {/* Trim Bounds Indicators */}
                 <div className="absolute bottom-2 left-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-sm">
                     Trim: {formatTime(trimBounds.start)} - {formatTime(trimBounds.end)}
                 </div>
+
+                {/* Overlay Selection Indicator */}
+                {selectedOverlayId && (
+                    <div className="absolute top-2 right-2 bg-blue-500 bg-opacity-80 text-white px-2 py-1 rounded text-sm">
+                        Overlay Selected
+                    </div>
+                )}
+
+                {/* Drag Instructions */}
+                {textOverlays.length > 0 && (
+                    <div className="absolute top-2 left-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs">
+                        Click and drag text overlays to reposition
+                    </div>
+                )}
             </div>
 
             {/* Video Controls */}

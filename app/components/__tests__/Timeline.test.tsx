@@ -22,6 +22,7 @@ const mockCanvasContext = {
     clearRect: jest.fn(),
     fillRect: jest.fn(),
     fillText: jest.fn(),
+    strokeRect: jest.fn(),
     beginPath: jest.fn(),
     arc: jest.fn(),
     fill: jest.fn(),
@@ -251,5 +252,160 @@ describe('Timeline Component', () => {
 
         // Should not crash
         expect(canvas).toBeInTheDocument();
+    });
+
+    describe('Subtitle Synchronization', () => {
+        it('seeks to subtitle start when clicking on subtitle segment', async () => {
+            const onTimeSeek = jest.fn();
+            const props = {
+                ...defaultProps,
+                onTimeSeek,
+                subtitles: [
+                    { start: 15, end: 20, text: 'First subtitle', confidence: 0.9 },
+                    { start: 25, end: 30, text: 'Second subtitle', confidence: 0.8 }
+                ]
+            };
+
+            await act(async () => {
+                render(<Timeline {...props} />);
+            });
+
+            const canvas = document.querySelector('canvas');
+            expect(canvas).toBeInTheDocument();
+
+            // Click in the subtitle area (bottom part of timeline)
+            fireEvent.mouseDown(canvas!, { clientX: 150, clientY: 75 }); // Near bottom
+
+            await waitFor(() => {
+                expect(onTimeSeek).toHaveBeenCalled();
+            });
+        });
+
+        it('highlights active subtitle segment during playback', async () => {
+            const props = {
+                ...defaultProps,
+                currentTime: 17, // Within first subtitle (15-20)
+                subtitles: [
+                    { start: 15, end: 20, text: 'Active subtitle', confidence: 0.9 },
+                    { start: 25, end: 30, text: 'Inactive subtitle', confidence: 0.8 }
+                ]
+            };
+
+            await act(async () => {
+                render(<Timeline {...props} />);
+            });
+
+            // Canvas should be rendered and drawing functions called
+            expect(mockCanvasContext.fillRect).toHaveBeenCalled();
+            expect(mockCanvasContext.strokeRect).toHaveBeenCalled();
+        });
+
+        it('shows subtitle tooltips on hover', async () => {
+            const props = {
+                ...defaultProps,
+                subtitles: [
+                    { start: 15, end: 20, text: 'This is a long subtitle text that should be truncated', confidence: 0.9 }
+                ]
+            };
+
+            await act(async () => {
+                render(<Timeline {...props} />);
+            });
+
+            const canvas = document.querySelector('canvas');
+            expect(canvas).toBeInTheDocument();
+
+            // Hover over subtitle area
+            fireEvent.mouseMove(canvas!, { clientX: 150, clientY: 75 });
+
+            // Should call drawing functions for tooltip
+            expect(mockCanvasContext.fillRect).toHaveBeenCalled();
+            expect(mockCanvasContext.fillText).toHaveBeenCalled();
+        });
+
+        it('changes cursor style when hovering over different elements', async () => {
+            await act(async () => {
+                render(<Timeline {...defaultProps} />);
+            });
+
+            const canvas = document.querySelector('canvas');
+            const container = canvas?.parentElement;
+            expect(container).toBeInTheDocument();
+
+            // Hover over subtitle area
+            fireEvent.mouseMove(canvas!, { clientX: 150, clientY: 75 });
+
+            // Container should have pointer cursor
+            expect(container).toHaveStyle('cursor: pointer');
+        });
+
+        it('handles subtitle click-to-seek correctly', async () => {
+            const onTimeSeek = jest.fn();
+            const props = {
+                ...defaultProps,
+                onTimeSeek,
+                subtitles: [
+                    { start: 10, end: 15, text: 'First subtitle' },
+                    { start: 20, end: 25, text: 'Second subtitle' }
+                ]
+            };
+
+            await act(async () => {
+                render(<Timeline {...props} />);
+            });
+
+            const canvas = document.querySelector('canvas');
+            expect(canvas).toBeInTheDocument();
+
+            // Click in subtitle area where first subtitle should be
+            fireEvent.mouseDown(canvas!, { clientX: 100, clientY: 75 });
+
+            await waitFor(() => {
+                expect(onTimeSeek).toHaveBeenCalled();
+                // Should seek to start of subtitle or clicked position
+                const seekTime = onTimeSeek.mock.calls[0][0];
+                expect(typeof seekTime).toBe('number');
+                expect(seekTime).toBeGreaterThanOrEqual(0);
+            });
+        });
+
+        it('displays subtitle segment numbers for wide segments', async () => {
+            const props = {
+                ...defaultProps,
+                subtitles: [
+                    { start: 10, end: 30, text: 'Long subtitle segment' } // Wide segment
+                ]
+            };
+
+            await act(async () => {
+                render(<Timeline {...props} />);
+            });
+
+            // Should call fillText for segment number
+            expect(mockCanvasContext.fillText).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.any(Number),
+                expect.any(Number)
+            );
+        });
+
+        it('handles mouse leave events to reset hover state', async () => {
+            await act(async () => {
+                render(<Timeline {...defaultProps} />);
+            });
+
+            const canvas = document.querySelector('canvas');
+            const container = canvas?.parentElement;
+            expect(container).toBeInTheDocument();
+
+            // Hover over subtitle area first
+            fireEvent.mouseMove(canvas!, { clientX: 150, clientY: 75 });
+
+            // Then leave the canvas
+            fireEvent.mouseLeave(canvas!);
+
+            // Should reset to default cursor
+            expect(container).toHaveStyle('cursor: pointer');
+        });
     });
 });
