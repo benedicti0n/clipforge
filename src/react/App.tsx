@@ -4,6 +4,7 @@ import { useThemeStore } from "./store/themeStore";
 import { useEffect, useState } from "react";
 import { Sun, Moon } from "lucide-react"
 import Upload from "./components/StepTabs/Upload/Upload";
+import TranscriptionTab from "./components/StepTabs/Transcription/Transcription";
 
 
 function App() {
@@ -34,7 +35,7 @@ function App() {
             <TabsContent value="upload">
               <Upload setActiveTab={setActiveTab} />
             </TabsContent>
-            <TabsContent value="transcription">Transcription tab content</TabsContent>
+            <TabsContent value="transcription"><TranscriptionTab /></TabsContent>
             <TabsContent value="clipSelection">Clip Selection tab content</TabsContent>
             <TabsContent value="editAndSubtitles">Edit and Subtitles tab content</TabsContent>
             <TabsContent value="export">Export tab content</TabsContent>
