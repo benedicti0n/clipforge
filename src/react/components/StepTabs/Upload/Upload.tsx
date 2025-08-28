@@ -1,11 +1,14 @@
 "use client";
 
-import { Button } from "../../ui/button";
-import { useUploadStore } from "../../../store/StepTabs/uploadStore";
 import { useCallback } from "react";
+import { useUploadStore } from "../../../store/StepTabs/uploadStore";
+import { Button } from "../../ui/button";
 
+interface UploadProps {
+    setActiveTab: (tab: string) => void;
+}
 
-export default function Upload() {
+export default function Upload({ setActiveTab }: UploadProps) {
     const { file, setFile, clearFile } = useUploadStore();
 
     const handleFileChange = useCallback(
@@ -13,8 +16,7 @@ export default function Upload() {
             const selectedFile = e.target.files?.[0];
             if (!selectedFile) return;
 
-            // limit 2GB
-            const maxSize = 2 * 1024 * 1024 * 1024;
+            const maxSize = 2 * 1024 * 1024 * 1024; // 2GB
             if (selectedFile.size > maxSize) {
                 alert("File size exceeds 2GB limit!");
                 return;
@@ -58,6 +60,9 @@ export default function Upload() {
                     <div className="flex gap-2">
                         <Button onClick={() => clearFile()} variant="destructive">
                             Remove
+                        </Button>
+                        <Button onClick={() => setActiveTab("transcription")}>
+                            Move to Transcription
                         </Button>
                     </div>
                 </div>
