@@ -40,7 +40,8 @@ export default function TranscriptionTab() {
         setTranscriptPath,
         setTranscriptPreview,
         setTranscriptFull,
-        setTranscriptedFile,
+        setTranscriptSRT,
+        transcriptSRT,
         resetResults,
     } = useTranscriptionStore();
 
@@ -97,7 +98,8 @@ export default function TranscriptionTab() {
             setTranscriptPath(resp.transcriptPath);
             setTranscriptPreview(resp.preview);
             setTranscriptFull(resp.full);
-            setTranscriptedFile(resp.transcriptPath);
+            setTranscriptSRT(resp.srt);  // ✅
+
         } catch (e) {
             console.error(e);
             alert("Transcription failed. See logs.");
@@ -121,6 +123,18 @@ export default function TranscriptionTab() {
         };
     }, []);
 
+    function parseSRT(srt: string) {
+        const blocks = srt.split(/\n\n+/).map((block) => {
+            const lines = block.split("\n");
+            if (lines.length >= 3) {
+                const time = lines[1];
+                const text = lines.slice(2).join(" ");
+                return { time, text };
+            }
+            return null;
+        });
+        return blocks.filter(Boolean);
+    }
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
@@ -179,14 +193,20 @@ export default function TranscriptionTab() {
                     </div>
 
                     <ScrollArea className="h-[340px] rounded-md border p-3">
-                        {transcriptPreview ? (
-                            <pre className="whitespace-pre-wrap text-sm">{transcriptPreview}</pre>
+                        {transcriptSRT ? (
+                            parseSRT(transcriptSRT).map((seg, i) => (
+                                <div key={i} className="mb-2">
+                                    <div className="text-xs text-muted-foreground">{seg?.time}</div>
+                                    <div className="text-sm">{seg?.text}</div>
+                                </div>
+                            ))
                         ) : (
                             <div className="text-sm text-muted-foreground">
-                                Preview will appear here after transcription.
+                                Transcript with timestamps will appear here after transcription.
                             </div>
                         )}
                     </ScrollArea>
+
 
                     <div className="flex gap-2">
                         <Button
@@ -225,6 +245,24 @@ export default function TranscriptionTab() {
                         >
                             Toggle Full / Preview
                         </Button>
+
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                if (!transcriptSRT) return;
+                                const blob = new Blob([transcriptSRT], { type: "text/plain" });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = "transcript.srt";
+                                a.click();
+                                URL.revokeObjectURL(url);
+                            }}
+                            disabled={!transcriptSRT}
+                        >
+                            Download SRT
+                        </Button>
+
                     </div>
                 </CardContent>
             </Card>

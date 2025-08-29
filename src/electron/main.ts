@@ -170,7 +170,10 @@ ipcMain.handle("whisper:transcribe", async (e, payload: { model: WhisperModelKey
     const full = fileExists(out.txt) ? await readText(out.txt) : "";
     const preview = full.slice(0, 1200) + (full.length > 1200 ? "\n..." : "");
 
-    return { transcriptPath: out.srt, preview, full };
+    const srt = fileExists(out.srt) ? await readText(out.srt) : "";
+
+
+    return { transcriptPath: out.srt, preview, full, srt };
 });
 
 ipcMain.handle("file:read", async (_e, path: string) => {
