@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useUploadStore } from "../../../store/StepTabs/uploadStore";
 import { useTranscriptionStore, WHISPER_MODELS } from "../../../store/StepTabs/transcriptionStore";
 import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
@@ -107,6 +107,19 @@ export default function TranscriptionTab() {
     };
 
 
+    const [logs, setLogs] = useState<string[]>([]);
+
+    useEffect(() => {
+        const handler = (msg: string) => {
+            setLogs((prev) => [...prev, msg]);
+        };
+
+        window.electron?.ipcRenderer.on?.("whisper:log", handler);
+
+        return () => {
+            window.electron?.ipcRenderer.removeAllListeners?.("whisper:log");
+        };
+    }, []);
 
 
     return (
@@ -133,9 +146,19 @@ export default function TranscriptionTab() {
                             <PlayCircle className="h-4 w-4 mr-2" />
                             {isTranscribing ? "Transcribing..." : "Start Transcription"}
                         </Button>
+
+                        {/* ✅ Logs right below the button */}
+                        <ScrollArea className="h-[300px] rounded border bg-white dark:bg-black text-black dark:text-white font-mono text-xs p-2">
+                            {logs.length === 0 ? (
+                                <div className="text-muted-foreground">Logs will appear here...</div>
+                            ) : (
+                                logs.map((line, i) => <div key={i}>{line}</div>)
+                            )}
+                        </ScrollArea>
                     </div>
                 </CardContent>
             </Card>
+
 
             {/* RIGHT: Results / Preview */}
             <Card className="lg:col-span-3">

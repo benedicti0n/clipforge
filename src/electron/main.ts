@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, IpcMainInvokeEvent, webContents } from "electron";
 import path from "path";
 import fs from "fs"
 import { spawn } from "child_process";
@@ -123,8 +123,8 @@ async function extractAudioToWav(videoPath: string) {
 }
 
 // ---------- Helper: run whisper.cpp ----------
-async function runWhisper(modelPath: string, audioPath: string, outBaseName: string) {
-    const whisperBin = resolveBinaryPath("whisper-cli"); // dev: public/bin/whisper
+async function runWhisper(modelPath: string, audioPath: string, outBaseName: string, web: Electron.WebContents) {
+    const whisperBin = resolveBinaryPath("whisper-cli");
     const outBase = path.join(transcriptsDir(), outBaseName);
 
     await new Promise<void>((resolve, reject) => {
@@ -133,11 +133,17 @@ async function runWhisper(modelPath: string, audioPath: string, outBaseName: str
             "-f", audioPath,
             "-otxt",
             "-osrt",
-            "-of", outBase
+            "-of", outBase,
         ]);
 
-        child.stdout.on("data", () => { }); // optional: pipe logs
-        child.stderr.on("data", () => { });
+        child.stdout.on("data", (chunk) => {
+            web.send("whisper:log", chunk.toString());
+        });
+
+        child.stderr.on("data", (chunk) => {
+            web.send("whisper:log", chunk.toString());
+        });
+
         child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`whisper exited ${code}`))));
     });
 
@@ -148,32 +154,23 @@ async function runWhisper(modelPath: string, audioPath: string, outBaseName: str
 }
 
 // ---------- IPC: transcribe ----------
-ipcMain.handle("whisper:transcribe", async (_e: IpcMainInvokeEvent, payload: { model: WhisperModelKey; videoPath: string | null }) => {
+ipcMain.handle("whisper:transcribe", async (e, payload: { model: WhisperModelKey; videoPath: string | null }) => {
     const { model, videoPath } = payload;
-    if (!videoPath) throw new Error("videoPath not provided. In Electron, prefer using main-process dialog to choose files so their path is accessible.");
+    if (!videoPath) throw new Error("videoPath not provided");
 
-    // Resolve model path
     const entry = WHISPER_MODEL_FILES[model];
-    if (!entry) throw new Error(`Unknown model: ${model}`);
     const modelPath = path.join(modelsDir(), entry.filename);
-    if (!fileExists(modelPath)) throw new Error(`Model not cached: ${model}`);
 
-    // 1) Extract audio wav
     const wavPath = await extractAudioToWav(videoPath);
-
-    // 2) Run whisper
     const baseName = path.parse(videoPath).name + "-" + Date.now().toString(36);
-    const out = await runWhisper(modelPath, wavPath, baseName);
 
-    // 3) Read outputs
+    // ✅ pass sender’s webContents
+    const out = await runWhisper(modelPath, wavPath, baseName, e.sender);
+
     const full = fileExists(out.txt) ? await readText(out.txt) : "";
     const preview = full.slice(0, 1200) + (full.length > 1200 ? "\n..." : "");
 
-    return {
-        transcriptPath: out.srt, // you’ll feed this to the next tab
-        preview,
-        full,
-    };
+    return { transcriptPath: out.srt, preview, full };
 });
 
 ipcMain.handle("file:read", async (_e, path: string) => {
