@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, IpcMainInvokeEvent } from "electron";
 import path from "path";
+import fs from "fs"
 import { spawn } from "child_process";
 import { ensureDir, fileExists, resolveBinaryPath, tmpPath, readText, downloadWithProgress, isDev } from "./util.js";
 import { WHISPER_MODEL_FILES, WhisperModelKey } from "./constants/whisper.js";
@@ -17,6 +18,7 @@ function createWindow() {
         webPreferences: {
             contextIsolation: true,
             nodeIntegration: false,
+            webSecurity: false,
             preload: getPreloadPath(),
         },
     });
@@ -159,4 +161,8 @@ ipcMain.handle("whisper:transcribe", async (_e: IpcMainInvokeEvent, payload: { m
         preview,
         full,
     };
+});
+
+ipcMain.handle("file:read", async (_e, path: string) => {
+    return fs.readFileSync(path); // Buffer → sent to renderer
 });

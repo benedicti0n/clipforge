@@ -14,9 +14,13 @@ export default function Upload({ setActiveTab }: UploadProps) {
     const pickVideo = async () => {
         const path = await window.electron?.ipcRenderer.invoke("dialog:openVideo");
         if (path) {
-            setFilePath(path);
+            const response = await window.electron?.ipcRenderer.invoke("file:read", path);
+            const blob = new Blob([response], { type: "video/mp4" });
+            const url = URL.createObjectURL(blob);
+            setFilePath(url);
         }
     };
+
 
     return (
         <div className="flex flex-col items-center justify-center gap-4 p-6">
@@ -29,11 +33,13 @@ export default function Upload({ setActiveTab }: UploadProps) {
             ) : (
                 <div className="flex flex-col items-center gap-3">
                     <video
-                        src={`file://${filePath}`}
+                        src={filePath}   // use the blob URL directly
                         controls
                         className="max-w-lg rounded-lg border shadow"
                     />
-                    <p className="text-sm text-muted-foreground break-all">{filePath}</p>
+                    <p className="text-sm text-muted-foreground break-all">
+                        {filePath.startsWith("blob:") ? "Blob URL (in-memory)" : filePath}
+                    </p>
                     <div className="flex gap-2">
                         <Button onClick={() => clearFile()} variant="destructive">
                             Remove
