@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import { useUploadStore } from "../../../store/StepTabs/uploadStore";
-import { useTranscriptionStore, WHISPER_MODELS, type WhisperModel } from "../../../store/StepTabs/transcriptionStore";
+import { useTranscriptionStore, WHISPER_MODELS } from "../../../store/StepTabs/transcriptionStore";
 import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
 import { Separator } from "../../ui/separator";
 import { Button } from "../../ui/button";

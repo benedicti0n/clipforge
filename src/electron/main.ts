@@ -73,20 +73,31 @@ ipcMain.handle("whisper:checkCache", async (_e: IpcMainInvokeEvent, modelKey: Wh
 });
 
 // ---------- IPC: download model (+progress events) ----------
-ipcMain.handle("whisper:downloadModel", async (e: IpcMainInvokeEvent, modelKey: WhisperModelKey) => {
+ipcMain.handle("whisper:downloadModel", async (_e, modelKey: WhisperModelKey) => {
     const entry = WHISPER_MODEL_FILES[modelKey];
     if (!entry) throw new Error(`Unknown model: ${modelKey}`);
 
     const dest = path.join(modelsDir(), entry.filename);
-    if (fileExists(dest)) return true;
 
-    const web = BrowserWindow.fromWebContents(e.sender);
-    await downloadWithProgress(entry.url, dest, (percent) => {
-        web?.webContents.send("whisper:download:progress", { model: modelKey, percent });
-    });
+    // ✅ Copy from public/models if it exists there
+    const localPath = path.join(process.cwd(), "public", "models", entry.filename);
+    if (fs.existsSync(localPath)) {
+        fs.copyFileSync(localPath, dest);
+        return true;
+    }
 
-    return true;
+    // Otherwise fallback to download (if URL is remote)
+    if (entry.url.startsWith("http")) {
+        const web = BrowserWindow.fromWebContents(_e.sender);
+        await downloadWithProgress(entry.url, dest, (percent) => {
+            web?.webContents.send("whisper:download:progress", { model: modelKey, percent });
+        });
+        return true;
+    }
+
+    throw new Error(`Model not found locally and no remote URL for ${modelKey}`);
 });
+
 
 // ---------- Helper: extract audio with ffmpeg ----------
 async function extractAudioToWav(videoPath: string) {
