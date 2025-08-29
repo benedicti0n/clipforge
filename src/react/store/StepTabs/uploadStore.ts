@@ -1,13 +1,13 @@
 import { create } from "zustand";
 
 interface UploadState {
-    file: File | null;
-    setFile: (file: File | null) => void;
+    filePath: string | null;
+    setFilePath: (path: string | null) => void;
     clearFile: () => void;
 }
 
 export const useUploadStore = create<UploadState>((set) => ({
-    file: null,
-    setFile: (file) => set({ file }),
-    clearFile: () => set({ file: null }),
+    filePath: null,
+    setFilePath: (path) => set({ filePath: path }),
+    clearFile: () => set({ filePath: null }),
 }));

@@ -38,6 +38,8 @@ interface TranscriptionState {
     transcriptPath: string | null;
     transcriptPreview: string;
     transcriptFull: string;
+    transcriptedFile: string | null;
+    setTranscriptedFile: (file: string | null) => void;
 
     setSelectedModel: (m: WhisperModel) => void;
     setCacheFor: (m: WhisperModel, cached: boolean) => void;
@@ -62,6 +64,8 @@ export const useTranscriptionStore = create<TranscriptionState>((set) => ({
     transcriptPath: null,
     transcriptPreview: "",
     transcriptFull: "",
+    transcriptedFile: null,
+    setTranscriptedFile: (file) => set({ transcriptedFile: file }),
 
     setSelectedModel: (m) => set({ selectedModel: m }),
     setCacheFor: (m, cached) => set((s) => ({ cache: { ...s.cache, [m]: cached } })),

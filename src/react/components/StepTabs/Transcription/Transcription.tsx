@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import WhisperModelDropdown from "./WhisperModelDropDown";
 import { useUploadStore } from "../../../store/StepTabs/uploadStore";
 import { useTranscriptionStore, WHISPER_MODELS, type WhisperModel } from "../../../store/StepTabs/transcriptionStore";
 import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
@@ -9,6 +8,7 @@ import { Separator } from "../../ui/separator";
 import { Button } from "../../ui/button";
 import { PlayCircle } from "lucide-react";
 import { ScrollArea } from "../../ui/scroll-area";
+import WhisperModelDropdown from "./WhisperModelDropdown";
 
 type IPC = {
     invoke: (channel: string, ...args: any[]) => Promise<any>;
@@ -27,15 +27,11 @@ function bytesMB(n: number) {
 }
 
 export default function TranscriptionTab() {
-    const { file } = useUploadStore();
-
     const {
         selectedModel,
         cache,
         setCacheFor,
-        setDownloadProgress,
         isDownloading,
-        setIsDownloading,
         isTranscribing,
         setIsTranscribing,
         transcriptPath,
@@ -44,6 +40,7 @@ export default function TranscriptionTab() {
         setTranscriptPath,
         setTranscriptPreview,
         setTranscriptFull,
+        setTranscriptedFile,
         resetResults,
     } = useTranscriptionStore();
 
@@ -74,82 +71,42 @@ export default function TranscriptionTab() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const { filePath } = useUploadStore();
+
     const canStart = useMemo(() => {
-        if (!file) return false;
+        if (!filePath) return false;
         if (!selectedModel) return false;
         if (!cache[selectedModel]) return false;
         return true;
-    }, [file, selectedModel, cache]);
-
-    const handleDownload = async (model: WhisperModel) => {
-        setIsDownloading(true);
-        setDownloadProgress(model, 0);
-
-        try {
-            // Expect main process to stream progress events (0-100)
-            // and resolve when done. If not available yet, we poll a fake progress.
-            if (ipc?.on) {
-                ipc.on("whisper:download:progress", (_evt: any, payload: { model: WhisperModel; percent: number }) => {
-                    if (payload.model === model) {
-                        setDownloadProgress(model, Math.max(0, Math.min(100, payload.percent)));
-                    }
-                });
-            }
-
-            await ipc?.invoke?.("whisper:downloadModel", model);
-            setCacheFor(model, true);
-            setDownloadProgress(model, 100);
-        } catch (e) {
-            console.error(e);
-            setDownloadProgress(model, 0);
-            alert("Failed to download model. Please try again.");
-        } finally {
-            setIsDownloading(false);
-            if (ipc?.removeAllListeners) ipc.removeAllListeners("whisper:download:progress");
-        }
-    };
+    }, [filePath, selectedModel, cache]);
 
     const handleStartTranscription = async () => {
-        if (!file || !selectedModel) return;
+        if (!filePath || !selectedModel) return;
 
         setIsTranscribing(true);
         resetResults();
 
         try {
-            // NOTE: In Electron, File objects often have a non-standard `.path`.
-            // If not available in your setup, you can pass the file as a temp path
-            // created on the main process. Adjust the IPC accordingly.
-            const filePath = (file as any).path ?? null;
+            const resp = await window.electron?.ipcRenderer.invoke("whisper:transcribe", {
+                model: selectedModel,
+                videoPath: filePath,
+            });
 
-            const resp: {
-                transcriptPath: string;
-                preview: string; // short preview text
-                full: string;    // full transcript text
-            } =
-                (await ipc?.invoke?.("whisper:transcribe", {
-                    model: selectedModel,
-                    videoPath: filePath,
-                    // You can pass flags like: { outputFormat: "srt|txt", timestamps: true }
-                })) ??
-                // Dev fallback (no Electron):
-                {
-                    transcriptPath: "/tmp/mock_transcript.txt",
-                    preview:
-                        "[00:00] Hello everyone...\n[00:10] In this video we discuss...\n[00:20] Persistence is key.\n...",
-                    full:
-                        "[00:00] Hello everyone, welcome...\n[00:10] In this video, we will discuss X...\n[00:20] Persistence is key to success...\n[00:31] Thank you for watching...",
-                };
+            if (!resp) throw new Error("IPC returned undefined");
 
             setTranscriptPath(resp.transcriptPath);
             setTranscriptPreview(resp.preview);
             setTranscriptFull(resp.full);
+            setTranscriptedFile(resp.transcriptPath);
         } catch (e) {
             console.error(e);
-            alert("Transcription failed. Check logs and try again.");
+            alert("Transcription failed. See logs.");
         } finally {
             setIsTranscribing(false);
         }
     };
+
+
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
