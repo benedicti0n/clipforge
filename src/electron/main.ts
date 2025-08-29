@@ -1,10 +1,11 @@
-import { app, BrowserWindow, dialog, ipcMain, IpcMainInvokeEvent, webContents } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, IpcMainInvokeEvent } from "electron";
 import path from "path";
 import fs from "fs"
 import { spawn } from "child_process";
 import { ensureDir, fileExists, resolveBinaryPath, tmpPath, readText, downloadWithProgress, isDev } from "./util.js";
 import { WHISPER_MODEL_FILES, WhisperModelKey } from "./constants/whisper.js";
 import { getPreloadPath } from "./pathResolver.js"
+import fetch from "node-fetch"
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -179,3 +180,112 @@ ipcMain.handle("whisper:transcribe", async (e, payload: { model: WhisperModelKey
 ipcMain.handle("file:read", async (_e, path: string) => {
     return fs.readFileSync(path); // Buffer → sent to renderer
 });
+
+// ipcMain.handle("ollama:list", async () => {
+//     return new Promise<string[]>((resolve) => {
+//         const child = spawn("ollama", ["list"]);
+//         let out = "";
+//         child.stdout.on("data", (d) => (out += d.toString()));
+//         child.on("close", () => {
+//             const models = out
+//                 .split("\n")
+//                 .slice(1)
+//                 .map((line) => line.split(/\s+/)[0])
+//                 .filter(Boolean);
+//             resolve(models);
+//         });
+//     });
+// });
+
+// ipcMain.handle("ollama:pull", async (_e, model: string) => {
+//     return new Promise<void>((resolve, reject) => {
+//         const child = spawn("ollama", ["pull", model], { stdio: "inherit" });
+//         child.on("close", (code) =>
+//             code === 0 ? resolve() : reject(new Error("Failed to pull model"))
+//         );
+//     });
+// });
+
+// ipcMain.handle("ollama:run", async (_e, payload: { model: string; prompt: string }) => {
+//     const { model, prompt } = payload;
+
+//     return new Promise<string>((resolve, reject) => {
+//         let output = "";
+
+//         const child = spawn("ollama", ["run", model, "--format", "json"], {
+//             stdio: ["pipe", "pipe", "pipe"],
+//         });
+
+//         child.stdin.write(prompt);
+//         child.stdin.end();
+
+//         child.stdout.on("data", (chunk) => {
+//             const msg = chunk.toString();
+//             output += msg;
+
+//             BrowserWindow.getAllWindows().forEach((w) =>
+//                 w.webContents.send("ollama:output", msg)
+//             );
+//         });
+
+//         child.stderr.on("data", (chunk) => {
+//             const msg = chunk.toString();
+//             console.error("Ollama stderr:", msg);
+//             BrowserWindow.getAllWindows().forEach((w) =>
+//                 w.webContents.send("ollama:log", msg)
+//             );
+//         });
+
+//         child.on("close", (code) => {
+//             if (code === 0) {
+//                 try {
+//                     // Ollama JSON mode can emit multiple JSON objects per line
+//                     const lines = output.trim().split("\n").filter(Boolean);
+//                     const last = lines[lines.length - 1]; // final full JSON
+//                     resolve(last);
+//                 } catch (err) {
+//                     reject(new Error("Failed to parse Ollama JSON output"));
+//                 }
+//             } else {
+//                 reject(new Error(`Ollama exited with code ${code}`));
+//             }
+//         });
+//     });
+// });
+
+ipcMain.handle(
+    "gemini:run",
+    async (_e, payload: { apiKey: string; prompt: string; transcript: string }) => {
+        const { apiKey, prompt, transcript } = payload;
+
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`;
+
+            const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [
+                        {
+                            role: "user",
+                            parts: [
+                                { text: prompt },
+                                { text: transcript },
+                            ],
+                        },
+                    ],
+                }),
+            });
+
+            if (!res.ok) {
+                throw new Error(`Gemini API error ${res.status}: ${await res.text()}`);
+            }
+
+            const data = await res.json();
+            return data;
+        } catch (err) {
+            console.error("Gemini API error:", err);
+            throw err;
+        }
+    }
+);
