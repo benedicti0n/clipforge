@@ -86,13 +86,21 @@ export default function Upload({ setActiveTab }: UploadProps) {
                             const file = e.dataTransfer.files[0];
                             if (!file) return;
 
-                            const path = file.path; // ✅ Electron-specific
-                            const buffer = await window.electron?.ipcRenderer.invoke("file:read", path);
-                            const blob = new Blob([buffer], { type: "video/mp4" });
-                            const previewUrl = URL.createObjectURL(blob);
+                            if ("path" in file) {
+                                // ✅ Running inside Electron
+                                const path = (file as any).path;
+                                const buffer = await window.electron?.ipcRenderer.invoke("file:read", path);
+                                const blob = new Blob([buffer], { type: file.type || "video/mp4" });
+                                const previewUrl = URL.createObjectURL(blob);
 
-                            setFile(path, previewUrl);
+                                setFile(path, previewUrl);
+                            } else {
+                                // ✅ Running in normal browser (fallback for dev mode)
+                                const previewUrl = URL.createObjectURL(file);
+                                setFile(file.name, previewUrl);
+                            }
                         }}
+
                     >
                         <Video className="w-10 h-10 text-gray-400 mb-3" />
                         <p className="text-gray-600">Drag & Drop your video here</p>
@@ -110,12 +118,38 @@ export default function Upload({ setActiveTab }: UploadProps) {
                     />
 
                     {/* Metadata Section */}
-                    <div className="text-sm text-muted-foreground space-y-1">
-                        {absolutePath && <p><strong>Path:</strong> {absolutePath}</p>}
-                        {fileSize && <p><strong>Size:</strong> {fileSize}</p>}
-                        {duration && <p><strong>Duration:</strong> {duration}</p>}
-                        {resolution && <p><strong>Resolution:</strong> {resolution}</p>}
+                    <div className="w-full max-w-md rounded-lg border bg-muted/20 p-3 text-sm">
+                        <h4 className="mb-2 text-xs font-semibold uppercase text-muted-foreground tracking-wide">
+                            File Metadata
+                        </h4>
+                        <div className="space-y-1">
+                            {absolutePath && (
+                                <div className="flex justify-between">
+                                    <span className="font-medium text-muted-foreground">Path:</span>
+                                    <span className="truncate max-w-[60%] text-right">{absolutePath}</span>
+                                </div>
+                            )}
+                            {fileSize && (
+                                <div className="flex justify-between">
+                                    <span className="font-medium text-muted-foreground">Size:</span>
+                                    <span>{fileSize}</span>
+                                </div>
+                            )}
+                            {duration && (
+                                <div className="flex justify-between">
+                                    <span className="font-medium text-muted-foreground">Duration:</span>
+                                    <span>{duration}</span>
+                                </div>
+                            )}
+                            {resolution && (
+                                <div className="flex justify-between">
+                                    <span className="font-medium text-muted-foreground">Resolution:</span>
+                                    <span>{resolution}</span>
+                                </div>
+                            )}
+                        </div>
                     </div>
+
 
                     <div className="flex gap-3">
                         <Button
