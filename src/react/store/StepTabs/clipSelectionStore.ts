@@ -1,9 +1,18 @@
 import { create } from "zustand";
 
+interface ApiKey {
+    name: string;
+    key: string;
+}
+
 interface ClipSelectionState {
-    // Gemini
-    geminiApiKey: string | null;
-    setGeminiApiKey: (key: string) => void;
+    // Keys
+    apiKeys: ApiKey[];
+    selectedApiKey: string | null;
+    addApiKey: (apiKey: ApiKey) => void;
+    removeApiKey: (name: string) => void;
+    setSelectedApiKey: (name: string) => void;
+    setApiKeys: (keys: ApiKey[]) => void; // 🔑 new setter to overwrite safely
 
     // Model (Gemini model type)
     selectedModel: string | null;
@@ -21,17 +30,47 @@ interface ClipSelectionState {
 }
 
 export const useClipSelectionStore = create<ClipSelectionState>((set) => ({
-    geminiApiKey: null,
-    setGeminiApiKey: (key) => set({ geminiApiKey: key }),
+    apiKeys: [],
+    selectedApiKey: null,
 
+    // ✅ Deduplicate keys by name when adding
+    addApiKey: (apiKey) =>
+        set((state) => {
+            const keysMap = new Map(state.apiKeys.map((k) => [k.name, k]));
+            keysMap.set(apiKey.name, apiKey);
+            return {
+                apiKeys: Array.from(keysMap.values()),
+                selectedApiKey: apiKey.name,
+            };
+        }),
+
+    // ✅ Remove key
+    removeApiKey: (name) =>
+        set((state) => ({
+            apiKeys: state.apiKeys.filter((k) => k.name !== name),
+            selectedApiKey:
+                state.selectedApiKey === name ? null : state.selectedApiKey,
+        })),
+
+    // ✅ Set keys from file (avoids duplicates when reloading tab)
+    setApiKeys: (keys) =>
+        set({
+            apiKeys: [...new Map(keys.map((k) => [k.name, k])).values()],
+        }),
+
+    setSelectedApiKey: (name) => set({ selectedApiKey: name }),
+
+    // Models
     selectedModel: "gemini-1.5-pro-latest",
     setSelectedModel: (model) => set({ selectedModel: model }),
 
+    // Prompts
     selectedPrompt: null,
     setSelectedPrompt: (prompt) => set({ selectedPrompt: prompt }),
     promptText: "",
     setPromptText: (text) => set({ promptText: text }),
 
+    // Candidates
     clipCandidates: [],
     setClipCandidates: (candidates) => set({ clipCandidates: candidates }),
 }));

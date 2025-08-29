@@ -289,3 +289,49 @@ ipcMain.handle(
         }
     }
 );
+
+// ---------- IPC: Keys Store/Delete ----------
+type ApiKey = { name: string; key: string };
+
+// ---------- File helpers ----------
+function keysFilePath() {
+    return path.join(app.getPath("userData"), "gemini_keys.json");
+}
+
+function readKeys(): ApiKey[] {
+    try {
+        const raw = fs.readFileSync(keysFilePath(), "utf8");
+        return JSON.parse(raw);
+    } catch {
+        return [];
+    }
+}
+
+function writeKeys(keys: ApiKey[]) {
+    fs.writeFileSync(keysFilePath(), JSON.stringify(keys, null, 2), "utf8");
+}
+
+// ---------- IPC handlers ----------
+ipcMain.handle("keys:list", async () => {
+    return readKeys();
+});
+
+ipcMain.handle("keys:add", async (_e, apiKey: ApiKey) => {
+    let keys = readKeys();
+
+    // Prevent duplicates (by name)
+    keys = keys.filter((k) => k.name !== apiKey.name);
+    keys.push(apiKey);
+
+    writeKeys(keys);
+    return keys; // ✅ always return full updated list
+});
+
+ipcMain.handle("keys:remove", async (_e, name: string) => {
+    let keys = readKeys();
+
+    keys = keys.filter((k) => k.name !== name);
+
+    writeKeys(keys);
+    return keys; // ✅ always return full updated list
+});
