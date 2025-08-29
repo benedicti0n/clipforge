@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useUploadStore } from "../../../store/StepTabs/uploadStore";
 import { useTranscriptionStore, WHISPER_MODELS } from "../../../store/StepTabs/transcriptionStore";
 import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
@@ -22,11 +22,7 @@ declare global {
     }
 }
 
-function bytesMB(n: number) {
-    return `${n.toLocaleString()} MB`;
-}
-
-export default function TranscriptionTab() {
+export default function TranscriptionTab({ setActiveTab }: { setActiveTab: (tab: string) => void }) {
     const {
         selectedModel,
         cache,
@@ -35,7 +31,6 @@ export default function TranscriptionTab() {
         isTranscribing,
         setIsTranscribing,
         transcriptPath,
-        transcriptPreview,
         transcriptFull,
         setTranscriptPath,
         setTranscriptPreview,
@@ -111,6 +106,11 @@ export default function TranscriptionTab() {
 
     const [logs, setLogs] = useState<string[]>([]);
 
+    const logsEndRef = useRef<HTMLDivElement | null>(null);
+    useEffect(() => {
+        logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [logs]);
+
     useEffect(() => {
         const handler = (msg: string) => {
             setLogs((prev) => [...prev, msg]);
@@ -166,7 +166,13 @@ export default function TranscriptionTab() {
                             {logs.length === 0 ? (
                                 <div className="text-muted-foreground">Logs will appear here...</div>
                             ) : (
-                                logs.map((line, i) => <div key={i}>{line}</div>)
+                                <>
+                                    {logs.map((line, i) => (
+                                        <div key={i}>{line}</div>
+                                    ))}
+                                    {/* invisible div to scroll into view */}
+                                    <div ref={logsEndRef} />
+                                </>
                             )}
                         </ScrollArea>
                     </div>
@@ -227,26 +233,6 @@ export default function TranscriptionTab() {
                         </Button>
 
                         <Button
-                            variant="ghost"
-                            onClick={() => {
-                                if (!transcriptFull) return;
-                                // Simple modal-less “full view”: replace preview with full (toggle)
-                                // You can replace with a Sheet/Modal later.
-                                const currentlyPreviewingFull = transcriptPreview === transcriptFull;
-                                if (currentlyPreviewingFull) {
-                                    // restore short preview (first 800 chars)
-                                    const short = transcriptFull.slice(0, 800) + (transcriptFull.length > 800 ? "\n..." : "");
-                                    setTranscriptPreview(short);
-                                } else {
-                                    setTranscriptPreview(transcriptFull);
-                                }
-                            }}
-                            disabled={!transcriptFull}
-                        >
-                            Toggle Full / Preview
-                        </Button>
-
-                        <Button
                             variant="outline"
                             onClick={() => {
                                 if (!transcriptSRT) return;
@@ -263,7 +249,47 @@ export default function TranscriptionTab() {
                             Download SRT
                         </Button>
 
+                        <Button
+                            variant="outline"
+                            onClick={async () => {
+                                try {
+                                    const path = await window.electron?.ipcRenderer.invoke("dialog:openSRT");
+                                    if (!path) return;
+
+                                    const content = await window.electron?.ipcRenderer.invoke("file:readText", path);
+                                    if (content) {
+                                        setTranscriptSRT(content);
+                                        setTranscriptPath(path);
+                                        setTranscriptPreview(content.slice(0, 800) + (content.length > 800 ? "\n..." : ""));
+                                        setTranscriptFull(content);
+                                    }
+                                } catch (e) {
+                                    console.error("Failed to load SRT:", e);
+                                    alert("Could not load SRT file.");
+                                }
+                            }}
+                        >
+                            Add transcript manually
+                        </Button>
+
+                        <Button
+                            variant="destructive"
+                            onClick={() => {
+                                resetResults();
+                                setTranscriptSRT(null);
+                            }}
+                            disabled={!transcriptSRT && !transcriptFull}
+                        >
+                            Remove Transcript
+                        </Button>
                     </div>
+                    <Button
+                        className="w-full"
+                        onClick={() => setActiveTab("clipSelection")}
+                        disabled={!transcriptSRT && !transcriptFull}
+                    >
+                        Move to Clip Selection
+                    </Button>
                 </CardContent>
             </Card>
         </div>

@@ -36,7 +36,7 @@ function App() {
             <TabsContent value="upload">
               <Upload setActiveTab={setActiveTab} />
             </TabsContent>
-            <TabsContent value="transcription"><TranscriptionTab /></TabsContent>
+            <TabsContent value="transcription"><TranscriptionTab setActiveTab={setActiveTab} /></TabsContent>
             <TabsContent value="clipSelection"><ClipSelection setActiveTab={setActiveTab} /></TabsContent>
             <TabsContent value="editAndSubtitles">Edit and Subtitles tab content</TabsContent>
             <TabsContent value="export">Export tab content</TabsContent>

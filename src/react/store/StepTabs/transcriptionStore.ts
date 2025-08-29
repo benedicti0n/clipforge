@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 export type WhisperModel =
     | "tiny"
@@ -56,35 +57,45 @@ interface TranscriptionState {
     resetResults: () => void;
 }
 
-export const useTranscriptionStore = create<TranscriptionState>((set) => ({
-    selectedModel: null,
-    cache: {},
-    downloadProgress: {},
-    isDownloading: false,
-    isTranscribing: false,
+// ✅ wrap store with persist
+export const useTranscriptionStore = create<TranscriptionState>()(
+    persist(
+        (set) => ({
+            selectedModel: null,
+            cache: {},
+            downloadProgress: {},
+            isDownloading: false,
+            isTranscribing: false,
 
-    transcriptPath: null,
-    transcriptPreview: "",
-    transcriptFull: "",
-    transcriptedFile: null,
-    setTranscriptedFile: (file) => set({ transcriptedFile: file }),
-    transcriptSRT: null,
-    setTranscriptSRT: (srt: string | null) => set({ transcriptSRT: srt }),
-
-    setSelectedModel: (m) => set({ selectedModel: m }),
-    setCacheFor: (m, cached) => set((s) => ({ cache: { ...s.cache, [m]: cached } })),
-    setDownloadProgress: (m, p) => set((s) => ({ downloadProgress: { ...s.downloadProgress, [m]: p } })),
-    setIsDownloading: (v) => set({ isDownloading: v }),
-    setIsTranscribing: (v) => set({ isTranscribing: v }),
-
-    setTranscriptPath: (p) => set({ transcriptPath: p }),
-    setTranscriptPreview: (t) => set({ transcriptPreview: t }),
-    setTranscriptFull: (t) => set({ transcriptFull: t }),
-
-    resetResults: () =>
-        set({
             transcriptPath: null,
             transcriptPreview: "",
             transcriptFull: "",
+            transcriptedFile: null,
+            setTranscriptedFile: (file) => set({ transcriptedFile: file }),
+            transcriptSRT: null,
+            setTranscriptSRT: (srt: string | null) => set({ transcriptSRT: srt }),
+
+            setSelectedModel: (m) => set({ selectedModel: m }),
+            setCacheFor: (m, cached) =>
+                set((s) => ({ cache: { ...s.cache, [m]: cached } })),
+            setDownloadProgress: (m, p) =>
+                set((s) => ({ downloadProgress: { ...s.downloadProgress, [m]: p } })),
+            setIsDownloading: (v) => set({ isDownloading: v }),
+            setIsTranscribing: (v) => set({ isTranscribing: v }),
+
+            setTranscriptPath: (p) => set({ transcriptPath: p }),
+            setTranscriptPreview: (t) => set({ transcriptPreview: t }),
+            setTranscriptFull: (t) => set({ transcriptFull: t }),
+
+            resetResults: () =>
+                set({
+                    transcriptPath: null,
+                    transcriptPreview: "",
+                    transcriptFull: "",
+                }),
         }),
-}));
+        {
+            name: "transcription-store", // localStorage key
+        }
+    )
+);

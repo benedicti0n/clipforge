@@ -177,6 +177,21 @@ ipcMain.handle("whisper:transcribe", async (e, payload: { model: WhisperModelKey
     return { transcriptPath: out.srt, preview, full, srt };
 });
 
+ipcMain.handle("dialog:openSRT", async () => {
+    const result = await dialog.showOpenDialog({
+        properties: ["openFile"],
+        filters: [{ name: "SubRip Subtitle", extensions: ["srt"] }],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+});
+
+ipcMain.handle("file:readText", async (_e, path: string) => {
+    return fs.readFileSync(path, "utf-8");
+});
+
+
 ipcMain.handle("file:read", async (_e, path: string) => {
     return fs.readFileSync(path); // Buffer → sent to renderer
 });
