@@ -104,6 +104,8 @@ async function extractAudioToWav(videoPath: string) {
     const ffmpegBin = resolveBinaryPath("ffmpeg"); // use system ffmpeg or bundled
     const out = tmpPath("audio", "wav");
 
+    console.log("Running ffmpeg with:", ffmpegBin, videoPath, "->", out);
+
     await new Promise<void>((resolve, reject) => {
         const ff = spawn(ffmpegBin, [
             "-y",

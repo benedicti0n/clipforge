@@ -71,17 +71,17 @@ export default function TranscriptionTab() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const { filePath } = useUploadStore();
+    const { absolutePath } = useUploadStore();
 
     const canStart = useMemo(() => {
-        if (!filePath) return false;
+        if (!absolutePath) return false;
         if (!selectedModel) return false;
         if (!cache[selectedModel]) return false;
         return true;
-    }, [filePath, selectedModel, cache]);
+    }, [absolutePath, selectedModel, cache]);
 
     const handleStartTranscription = async () => {
-        if (!filePath || !selectedModel) return;
+        if (!absolutePath || !selectedModel) return;
 
         setIsTranscribing(true);
         resetResults();
@@ -89,7 +89,7 @@ export default function TranscriptionTab() {
         try {
             const resp = await window.electron?.ipcRenderer.invoke("whisper:transcribe", {
                 model: selectedModel,
-                videoPath: filePath,
+                videoPath: absolutePath,   // ✅ real filesystem path
             });
 
             if (!resp) throw new Error("IPC returned undefined");
@@ -105,6 +105,7 @@ export default function TranscriptionTab() {
             setIsTranscribing(false);
         }
     };
+
 
 
 
