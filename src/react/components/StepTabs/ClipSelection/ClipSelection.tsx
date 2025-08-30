@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useClipSelectionStore } from "../../../store/StepTabs/clipSelectionStore";
 import { useTranscriptionStore } from "../../../store/StepTabs/transcriptionStore";
 import { PROMPT_PRESETS } from "../../../constants/prompts";
@@ -106,6 +106,32 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
         } finally {
             setLoading(false);
         }
+    };
+
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    // --- Handle JSON Upload ---
+    const handleUploadJson = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const text = e.target?.result as string;
+                const parsed = JSON.parse(text);
+                if (Array.isArray(parsed)) {
+                    setClipCandidates(parsed);
+                    alert("✅ ViralClips.json uploaded successfully!");
+                } else {
+                    alert("⚠️ Invalid JSON format. Expected an array.");
+                }
+            } catch (err) {
+                console.error("Error parsing JSON:", err);
+                alert("⚠️ Failed to parse JSON file.");
+            }
+        };
+        reader.readAsText(file);
     };
 
     return (
@@ -238,13 +264,32 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
                         {transcriptSRT || "No transcript available."}
                     </ScrollArea>
 
-                    <Button
-                        className="w-full"
-                        onClick={handleSendToGemini}
-                        disabled={loading || !selectedApiKey || !transcriptSRT}
-                    >
-                        {loading ? "Running..." : `Send to ${selectedModel}`}
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button
+                            className="flex-1"
+                            onClick={handleSendToGemini}
+                            disabled={loading || !selectedApiKey || !transcriptSRT}
+                        >
+                            {loading ? "Running..." : `Send to ${selectedModel}`}
+                        </Button>
+
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="file"
+                                accept="application/json"
+                                ref={fileInputRef}
+                                className="hidden"
+                                onChange={handleUploadJson}
+                            />
+                            <Button
+                                variant="outline"
+                                onClick={() => fileInputRef.current?.click()}
+                            >
+                                Upload ViralClips.json
+                            </Button>
+                        </div>
+                    </div>
+
 
                     {clipCandidates.length > 0 && (
                         <div className="space-y-2">
