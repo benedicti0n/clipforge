@@ -5,12 +5,14 @@ import { useUploadStore } from "../../../store/StepTabs/uploadStore";
 import { useClipSelectionStore } from "../../../store/StepTabs/clipSelectionStore";
 import { Card, CardContent } from "../../ui/card";
 import { Button } from "../../ui/button";
+import EditClipModal from "./EditClipModal"; // ✅ Import your modal
 
 export default function EditSubtitleTab() {
     const { absolutePath } = useUploadStore();
     const { clipCandidates, setClipFilePath } = useClipSelectionStore();
 
     const [loading, setLoading] = useState(false);
+    const [editingClipIndex, setEditingClipIndex] = useState<number | null>(null);
 
     const handleGenerateClips = async () => {
         if (!absolutePath || clipCandidates.length === 0) {
@@ -25,8 +27,8 @@ export default function EditSubtitleTab() {
                 clips: clipCandidates.map((c, i) => ({
                     index: i,
                     startTime: c.startTime,
-                    endTime: c.endTime
-                }))
+                    endTime: c.endTime,
+                })),
             };
 
             const results: { index: number; filePath: string }[] =
@@ -60,7 +62,6 @@ export default function EditSubtitleTab() {
         );
     }
 
-    // JSON exists but no filePath generated yet
     const allMissingFiles = clipCandidates.every((c) => !c.filePath);
 
     if (absolutePath && clipCandidates.length > 0 && allMissingFiles) {
@@ -114,8 +115,8 @@ export default function EditSubtitleTab() {
                                 </span>
                                 <span
                                     className={`px-2 py-1 rounded ${Number(clip.viralityScore) > 7
-                                        ? "bg-green-100 text-green-700"
-                                        : "bg-yellow-100 text-yellow-700"
+                                            ? "bg-green-100 text-green-700"
+                                            : "bg-yellow-100 text-yellow-700"
                                         }`}
                                 >
                                     Score: {clip.viralityScore}
@@ -127,17 +128,27 @@ export default function EditSubtitleTab() {
                             </p>
 
                             {/* ✅ Edit Button */}
-                            <Button
-                                size="sm"
-                                className="w-full"
-                                onClick={() => alert(`Edit clip ${i + 1}`)}
-                            >
+                            <Button size="sm" onClick={() => setEditingClipIndex(i)}>
                                 Edit
                             </Button>
                         </CardContent>
                     </Card>
                 ))}
             </div>
+
+            {/* ✅ Modal rendered once outside the loop */}
+            {editingClipIndex !== null && (
+                <EditClipModal
+                    open={editingClipIndex !== null}
+                    onClose={() => setEditingClipIndex(null)}
+                    clip={clipCandidates[editingClipIndex]}
+                    onSave={(newPath, newStart, newEnd) => {
+                        setClipFilePath(editingClipIndex, newPath);
+                        clipCandidates[editingClipIndex].startTime = newStart;
+                        clipCandidates[editingClipIndex].endTime = newEnd;
+                    }}
+                />
+            )}
         </div>
     );
 }

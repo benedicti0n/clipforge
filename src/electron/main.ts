@@ -391,3 +391,61 @@ ipcMain.handle("clip:generate", async (_e: IpcMainInvokeEvent, payload: {
 
     return results; // [{ index: 0, filePath: "...clip-0.mp4" }, ...]
 });
+
+
+
+
+// Where clips will be stored
+function clipsDir() {
+    return path.join(app.getPath("userData"), "clips");
+}
+
+// Ensure directory exists
+if (!fs.existsSync(clipsDir())) {
+    fs.mkdirSync(clipsDir(), { recursive: true });
+}
+
+// --- IPC: Trim Clip ---
+ipcMain.handle(
+    "clip:trim",
+    async (
+        _e: IpcMainInvokeEvent,
+        payload: { filePath: string; startTime: string; endTime: string; index: number }
+    ) => {
+        const { filePath, startTime, endTime, index } = payload;
+
+        return new Promise<string>((resolve, reject) => {
+            const outPath = path.join(
+                clipsDir(),
+                `clip-${index}.mp4` // overwrite same clip each time
+            );
+
+            const srtToFfmpegTime = (t: string) => t.trim().replace(",", ".");
+
+            const args = [
+                "-y", // overwrite
+                "-i", filePath, // MUST be original video
+                "-ss", srtToFfmpegTime(startTime),
+                "-to", srtToFfmpegTime(endTime),
+                "-c", "copy",
+                outPath,
+            ];
+
+            console.log("Running ffmpeg trim:", args.join(" "));
+
+            const ff = spawn("ffmpeg", args);
+
+            ff.stderr.on("data", (chunk) => {
+                console.log("ffmpeg:", chunk.toString());
+            });
+
+            ff.on("close", (code) => {
+                if (code === 0) {
+                    resolve(outPath);
+                } else {
+                    reject(new Error(`ffmpeg exited with code ${code}`));
+                }
+            });
+        });
+    }
+);
