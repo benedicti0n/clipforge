@@ -5,6 +5,17 @@ interface ApiKey {
     key: string;
 }
 
+interface ClipCandidate {
+    startTime: string;
+    endTime: string;
+    transcriptionPart: string;
+    viralityScore: string;
+    totalDuration: string;
+    suitableCaption: string;
+    filePath?: string; // after trimming
+}
+
+
 interface ClipSelectionState {
     // Keys
     apiKeys: ApiKey[];
@@ -25,8 +36,9 @@ interface ClipSelectionState {
     setPromptText: (text: string) => void;
 
     // Candidates
-    clipCandidates: any[];
-    setClipCandidates: (candidates: any[]) => void;
+    clipCandidates: ClipCandidate[];
+    setClipCandidates: (candidates: ClipCandidate[]) => void;
+    setClipFilePath: (index: number, path: string) => void
 }
 
 export const useClipSelectionStore = create<ClipSelectionState>((set) => ({
@@ -73,4 +85,10 @@ export const useClipSelectionStore = create<ClipSelectionState>((set) => ({
     // Candidates
     clipCandidates: [],
     setClipCandidates: (candidates) => set({ clipCandidates: candidates }),
+    setClipFilePath: (index, path) =>
+        set((state) => {
+            const updated = [...state.clipCandidates];
+            if (updated[index]) updated[index].filePath = path;
+            return { clipCandidates: updated };
+        }),
 }));

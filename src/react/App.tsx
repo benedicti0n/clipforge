@@ -6,6 +6,7 @@ import { Sun, Moon } from "lucide-react"
 import Upload from "./components/StepTabs/Upload/Upload";
 import TranscriptionTab from "./components/StepTabs/Transcription/Transcription";
 import ClipSelection from "./components/StepTabs/ClipSelection/ClipSelection";
+import EditSubtitleTab from "./components/StepTabs/EditAndSubtitle/EditAndSubtitle";
 
 
 function App() {
@@ -38,7 +39,7 @@ function App() {
             </TabsContent>
             <TabsContent value="transcription"><TranscriptionTab setActiveTab={setActiveTab} /></TabsContent>
             <TabsContent value="clipSelection"><ClipSelection setActiveTab={setActiveTab} /></TabsContent>
-            <TabsContent value="editAndSubtitles">Edit and Subtitles tab content</TabsContent>
+            <TabsContent value="editAndSubtitles"><EditSubtitleTab /></TabsContent>
             <TabsContent value="export">Export tab content</TabsContent>
           </Tabs>
         </div>

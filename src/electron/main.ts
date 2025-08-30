@@ -350,3 +350,44 @@ ipcMain.handle("keys:remove", async (_e, name: string) => {
     writeKeys(keys);
     return keys; // ✅ always return full updated list
 });
+
+// ---------- IPC: Clip trimming ----------
+// Helper: format safe temp clip path
+function clipOutputPath(index: number) {
+    return tmpPath(`clip-${index}`, "mp4");
+}
+
+ipcMain.handle("clip:generate", async (_e: IpcMainInvokeEvent, payload: {
+    videoPath: string;
+    clips: { startTime: string; endTime: string; index: number }[];
+}) => {
+    const { videoPath, clips } = payload;
+
+    const results: { index: number; filePath: string }[] = [];
+
+    for (const { startTime, endTime, index } of clips) {
+        const outPath = clipOutputPath(index);
+
+        await new Promise<void>((resolve, reject) => {
+            const ff = spawn("ffmpeg", [
+                "-y",
+                "-i", videoPath,
+                "-ss", startTime,
+                "-to", endTime,
+                "-c", "copy",
+                outPath
+            ]);
+
+            ff.on("close", (code) => {
+                if (code === 0) {
+                    results.push({ index, filePath: outPath });
+                    resolve();
+                } else {
+                    reject(new Error(`ffmpeg exited with code ${code}`));
+                }
+            });
+        });
+    }
+
+    return results; // [{ index: 0, filePath: "...clip-0.mp4" }, ...]
+});
