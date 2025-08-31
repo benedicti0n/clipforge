@@ -31,3 +31,32 @@ export function runFFmpeg(args: string[]): Promise<void> {
         ff.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`))));
     });
 }
+
+
+// Simple time-to-seconds helper
+export function toSeconds(srtTime: string): number {
+    const [hms, ms = "0"] = srtTime.split(",");
+    const [h, m, s] = hms.split(":").map(Number);
+    return h * 3600 + m * 60 + s + (parseInt(ms, 10) || 0) / 1000;
+}
+
+// Escape text for ffmpeg drawtext
+export function escapeText(text: string) {
+    return text
+        .replace(/:/g, "\\:")   // colons
+        .replace(/'/g, "\\'")   // single quotes
+        .replace(/%/g, "\\%");  // percents
+}
+
+export function ffmpegTimeToSeconds(time: string): number {
+    const parts = time.split(":").map(Number);
+    if (parts.length === 3) {
+        const [h, m, s] = parts;
+        return h * 3600 + m * 60 + s;
+    }
+    if (parts.length === 2) {
+        const [m, s] = parts;
+        return m * 60 + s;
+    }
+    return 0;
+}

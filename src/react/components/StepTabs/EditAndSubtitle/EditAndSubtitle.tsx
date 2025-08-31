@@ -5,14 +5,17 @@ import { useUploadStore } from "../../../store/StepTabs/uploadStore";
 import { useClipSelectionStore } from "../../../store/StepTabs/clipSelectionStore";
 import { Card, CardContent } from "../../ui/card";
 import { Button } from "../../ui/button";
-import EditClipModal from "./EditClipModal"; // ✅ Import your modal
+import EditClipModal from "./EditClipModal";
+import SubtitleModal from "./Editor/SubtitleModal";
 
 export default function EditSubtitleTab() {
     const { absolutePath } = useUploadStore();
-    const { clipCandidates, setClipFilePath } = useClipSelectionStore();
+    const { clipCandidates, setClipFilePath, setClipCandidates } =
+        useClipSelectionStore();
 
     const [loading, setLoading] = useState(false);
     const [editingClipIndex, setEditingClipIndex] = useState<number | null>(null);
+    const [subtitleClipIndex, setSubtitleClipIndex] = useState<number | null>(null);
 
     const handleGenerateClips = async () => {
         if (!absolutePath || clipCandidates.length === 0) {
@@ -57,7 +60,7 @@ export default function EditSubtitleTab() {
     if (absolutePath && clipCandidates.length === 0) {
         return (
             <div className="text-center text-muted-foreground py-10">
-                Transcript clips JSON not found or empty. Please upload or generate a ViralClips.json<br />
+                Transcript clips JSON not found or empty. Please upload or generate a ViralClips.json
             </div>
         );
     }
@@ -80,11 +83,9 @@ export default function EditSubtitleTab() {
         <div className="space-y-4">
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-semibold">Generated Clips</h2>
-                {absolutePath && (
-                    <Button onClick={handleGenerateClips} disabled={loading}>
-                        {loading ? "Generating..." : "Regenerate Clips"}
-                    </Button>
-                )}
+                <Button onClick={handleGenerateClips} disabled={loading}>
+                    {loading ? "Generating..." : "Regenerate Clips"}
+                </Button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -98,7 +99,7 @@ export default function EditSubtitleTab() {
                             />
                         ) : (
                             <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">
-                                Clip not generated yet
+                                ⚠️ Clip not generated yet
                             </div>
                         )}
 
@@ -115,8 +116,8 @@ export default function EditSubtitleTab() {
                                 </span>
                                 <span
                                     className={`px-2 py-1 rounded ${Number(clip.viralityScore) > 7
-                                            ? "bg-green-100 text-green-700"
-                                            : "bg-yellow-100 text-yellow-700"
+                                        ? "bg-green-100 text-green-700"
+                                        : "bg-yellow-100 text-yellow-700"
                                         }`}
                                 >
                                     Score: {clip.viralityScore}
@@ -127,16 +128,25 @@ export default function EditSubtitleTab() {
                                 {clip.suitableCaption}
                             </p>
 
-                            {/* ✅ Edit Button */}
-                            <Button size="sm" onClick={() => setEditingClipIndex(i)}>
-                                Edit
-                            </Button>
+                            <div className="flex gap-2">
+                                {/* ✅ Edit Button */}
+                                <Button size="sm" onClick={() => setEditingClipIndex(i)}>
+                                    Edit
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => setSubtitleClipIndex(i)}
+                                >
+                                    Add Subtitles
+                                </Button>
+                            </div>
                         </CardContent>
                     </Card>
                 ))}
             </div>
 
-            {/* ✅ Modal rendered once outside the loop */}
+            {/* ✅ Edit Modal */}
             {editingClipIndex !== null && (
                 <EditClipModal
                     open={editingClipIndex !== null}
@@ -144,8 +154,29 @@ export default function EditSubtitleTab() {
                     clip={clipCandidates[editingClipIndex]}
                     onSave={(newPath, newStart, newEnd) => {
                         setClipFilePath(editingClipIndex, newPath);
-                        clipCandidates[editingClipIndex].startTime = newStart;
-                        clipCandidates[editingClipIndex].endTime = newEnd;
+
+                        // update times without mutating
+                        const updated = [...clipCandidates];
+                        updated[editingClipIndex] = {
+                            ...updated[editingClipIndex],
+                            startTime: newStart,
+                            endTime: newEnd,
+                        };
+                        setClipCandidates(updated);
+                    }}
+                />
+            )}
+
+            {/* ✅ Subtitle Modal */}
+            {subtitleClipIndex !== null && (
+                <SubtitleModal
+                    open={subtitleClipIndex !== null}
+                    onClose={() => setSubtitleClipIndex(null)}
+                    clip={clipCandidates[subtitleClipIndex]}
+                    index={subtitleClipIndex}
+                    onSave={(newPath) => {
+                        // Replace clip path in store/state
+                        setClipFilePath(subtitleClipIndex, newPath);
                     }}
                 />
             )}

@@ -1,201 +1,191 @@
 import { ipcMain, IpcMainInvokeEvent } from "electron";
 import path from "path";
 import { spawn } from "child_process";
-import * as fs from "fs";
+import * as fs from "fs/promises";
 
-import { clipsDir, clipOutputPath } from "../helpers/paths.js";
-import { runFFmpeg } from "../helpers/ffmpeg.js";
+import { clipOutputPath } from "../helpers/paths.js";
+import { runFFmpeg, ffmpegTimeToSeconds } from "../helpers/ffmpeg.js";
+import { ensureClipsDir, hexToAssColor, buildCustomDrawtext } from "../helpers/clip.js";
 
-// ---------- Ensure clips dir ----------
-if (!fs.existsSync(clipsDir())) {
-    fs.mkdirSync(clipsDir(), { recursive: true });
+// -------------------- Types --------------------
+interface SubtitleEntry {
+    start: string;
+    end: string;
+    text: string;
 }
 
-// ---------- IPC Handlers ----------
+interface SubtitleStyle {
+    fontSize: number;
+    fontColor: string;   // "#RRGGBB"
+    strokeColor: string; // "#RRGGBB"
+    fontFamily: string;
+    x: number;           // preview only
+    y: number;           // preview only
+}
+
+interface CustomText {
+    text: string;
+    fontSize: number;
+    fontColor: string;
+    strokeColor: string;
+    fontFamily: string;
+    x: number; // 0..100 (%)
+    y: number; // 0..100 (%)
+}
+
+// -------------------- IPC Handlers --------------------
 export function registerClipHandlers() {
-    /**
-     * Generate multiple clips from a video file
-     */
+    // ---- Generate clips ----
     ipcMain.handle(
         "clip:generate",
         async (
             _e: IpcMainInvokeEvent,
-            payload: { videoPath: string; clips: { startTime: string; endTime: string; index: number }[] }
+            payload: {
+                videoPath: string;
+                clips: { startTime: string; endTime: string; index: number }[];
+                accurate?: boolean;
+            }
         ) => {
-            const { videoPath, clips } = payload;
+            const { videoPath, clips, accurate = false } = payload;
             const results: { index: number; filePath: string }[] = [];
 
             for (const { startTime, endTime, index } of clips) {
                 const outPath = clipOutputPath(index);
 
-                await new Promise<void>((resolve, reject) => {
-                    const ff = spawn("ffmpeg", [
-                        "-y",
-                        "-i",
-                        videoPath,
-                        "-ss",
-                        startTime,
-                        "-to",
-                        endTime,
-                        "-c",
-                        "copy",
-                        outPath,
-                    ]);
+                const startSec = ffmpegTimeToSeconds(startTime);
+                const endSec = ffmpegTimeToSeconds(endTime);
+                const duration = Math.max(endSec - startSec, 0.01);
 
-                    ff.on("close", (code) => {
-                        if (code === 0) {
-                            results.push({ index, filePath: outPath });
-                            resolve();
-                        } else {
-                            reject(new Error(`ffmpeg exited with code ${code}`));
-                        }
-                    });
+                const args = accurate
+                    ? [
+                        "-y",
+                        "-i", videoPath,
+                        "-ss", startTime,
+                        "-t", duration.toString(),
+                        "-c:v", "libx264",
+                        "-preset", "fast",
+                        "-crf", "23",
+                        "-c:a", "aac",
+                        outPath,
+                    ]
+                    : [
+                        "-y",
+                        "-ss", startTime,
+                        "-i", videoPath,
+                        "-t", duration.toString(),
+                        "-c", "copy",
+                        outPath,
+                    ];
+
+                console.log("ffmpeg generate:", args.join(" "));
+
+                await new Promise<void>((resolve, reject) => {
+                    const ff = spawn("ffmpeg", args);
+                    ff.on("close", (code) =>
+                        code === 0 ? (results.push({ index, filePath: outPath }), resolve()) : reject(new Error(`ffmpeg exited ${code}`))
+                    );
                 });
             }
 
-            return results; // [{ index: 0, filePath: "...clip-0.mp4" }, ...]
+            return results;
         }
     );
 
-    /**
-     * Trim a single clip
-     */
+    // ---- Trim a single clip ----
     ipcMain.handle(
         "clip:trim",
         async (
             _e: IpcMainInvokeEvent,
-            payload: { filePath: string; startTime: string; endTime: string; index: number }
+            payload: { filePath: string; startTime: string; endTime: string; index: number; accurate?: boolean }
         ) => {
-            const { filePath, startTime, endTime, index } = payload;
+            const { filePath, startTime, endTime, index, accurate = false } = payload;
 
-            return new Promise<string>((resolve, reject) => {
-                const outPath = clipOutputPath(index);
+            const startSec = ffmpegTimeToSeconds(startTime);
+            const endSec = ffmpegTimeToSeconds(endTime);
+            const duration = Math.max(endSec - startSec, 0.01);
 
-                // SRT time → ffmpeg time (replace , with .)
-                const srtToFfmpegTime = (t: string) => t.trim().replace(",", ".");
+            const outPath = clipOutputPath(index);
 
-                const args = [
+            const args = accurate
+                ? [
                     "-y",
-                    "-i",
-                    filePath,
-                    "-ss",
-                    srtToFfmpegTime(startTime),
-                    "-to",
-                    srtToFfmpegTime(endTime),
-                    "-c",
-                    "copy",
+                    "-i", filePath,
+                    "-ss", startTime,
+                    "-t", duration.toString(),
+                    "-c:v", "libx264",
+                    "-preset", "fast",
+                    "-crf", "23",
+                    "-c:a", "aac",
+                    outPath,
+                ]
+                : [
+                    "-y",
+                    "-ss", startTime,
+                    "-i", filePath,
+                    "-t", duration.toString(),
+                    "-c", "copy",
                     outPath,
                 ];
 
-                console.log("Running ffmpeg trim:", args.join(" "));
+            console.log("ffmpeg trim:", args.join(" "));
 
+            return new Promise<string>((resolve, reject) => {
                 const ff = spawn("ffmpeg", args);
-
-                ff.stderr.on("data", (chunk) => {
-                    console.log("ffmpeg:", chunk.toString());
-                });
-
-                ff.on("close", (code) => {
-                    if (code === 0) {
-                        resolve(outPath);
-                    } else {
-                        reject(new Error(`ffmpeg exited with code ${code}`));
-                    }
-                });
+                ff.stderr.on("data", (chunk) => console.log("ffmpeg:", chunk.toString()));
+                ff.on("close", (code) => (code === 0 ? resolve(outPath) : reject(new Error(`ffmpeg exited ${code}`))));
             });
         }
     );
 
-    /**
-     * Burn subtitles and custom texts into a clip
-     */
+    // ---- Add subtitles & custom texts ----
     ipcMain.handle(
         "clip:addSubtitles",
         async (
             _e,
-            {
-                filePath,
-                subtitles,
-                subtitleStyle,
-                customTexts,
-                index,
-            }: {
-                filePath: string;
-                subtitles: { start: string; end: string; text: string }[];
-                subtitleStyle: {
-                    fontSize: number;
-                    fontColor: string;
-                    strokeColor: string;
-                    fontFamily: string;
-                    x: number;
-                    y: number;
-                };
-                customTexts: {
-                    text: string;
-                    fontSize: number;
-                    fontColor: string;
-                    strokeColor: string;
-                    fontFamily: string;
-                    x: number;
-                    y: number;
-                }[];
-                index: number;
-            }
+            { filePath, subtitles, subtitleStyle, customTexts, index }: { filePath: string; subtitles: SubtitleEntry[]; subtitleStyle: SubtitleStyle; customTexts: CustomText[]; index: number }
         ) => {
             if (!filePath) throw new Error("filePath missing");
 
-            // Prepare paths
+            const outDir = await ensureClipsDir();
             const baseName = path.parse(filePath).name;
-            const srtPath = path.join(clipsDir(), `${baseName}-${index}.srt`);
-            const outPath = path.join(clipsDir(), `${baseName}-${index}-subbed.mp4`);
+            const srtPath = path.join(outDir, `${baseName}-${index}.srt`);
+            const outPath = path.join(outDir, `${baseName}-${index}-subbed.mp4`);
 
-            // 1. Write SRT file
-            const srtContent = subtitles
-                .map(
-                    (s, i) =>
-                        `${i + 1}\n${s.start} --> ${s.end}\n${s.text.replace(/\n+/g, " ")}\n`
-                )
+            // Build SRT
+            const srtContent = (subtitles || [])
+                .map((s, i) => {
+                    const oneLine = (s.text || "").replace(/\s*\n+\s*/g, " ").trim();
+                    return `${i + 1}\n${s.start} --> ${s.end}\n${oneLine}\n`;
+                })
                 .join("\n");
+            await fs.writeFile(srtPath, srtContent, { encoding: "utf-8" });
 
-            fs.writeFileSync(srtPath, srtContent, { encoding: "utf-8" });
+            // Subtitles filter (libass)
+            const srtPathEscaped = srtPath.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+            const primaryAss = hexToAssColor(subtitleStyle.fontColor);
+            const outlineAss = hexToAssColor(subtitleStyle.strokeColor);
 
-            // 2. Subtitles filter with styling
-            const subFilter = `subtitles='${srtPath.replace(
-                /\\/g,
-                "\\\\"
-            )}':force_style='Fontname=${subtitleStyle.fontFamily},FontSize=${subtitleStyle.fontSize
-                },PrimaryColour=&H${subtitleStyle.fontColor
-                    .replace("#", "")
-                    .toUpperCase()}&,OutlineColour=&H${subtitleStyle.strokeColor
-                        .replace("#", "")
-                        .toUpperCase()}&,Outline=2,Alignment=2'`;
+            const subFilter =
+                `subtitles='${srtPathEscaped}':force_style=` +
+                `'Fontname=${subtitleStyle.fontFamily},` +
+                `FontSize=${subtitleStyle.fontSize},` +
+                `PrimaryColour=${primaryAss},` +
+                `OutlineColour=${outlineAss},` +
+                `Outline=2,` +
+                `Alignment=2'`;
 
-            // 3. Custom text overlays
-            const drawtextFilters = (customTexts || []).map((t) => {
-                return `drawtext=text='${t.text.replace(
-                    /:/g,
-                    "\\:"
-                )}':fontcolor=${t.fontColor}:fontsize=${t.fontSize}:x=(w-text_w)*${t.x / 100
-                    }:y=(h-text_h)*${t.y / 100}:bordercolor=${t.strokeColor}:borderw=2`;
-            });
-
+            // Custom overlays
+            const drawtextFilters = (customTexts || []).map(buildCustomDrawtext);
             const filterGraph = [subFilter, ...drawtextFilters].join(",");
 
-            // 4. Run ffmpeg
             await runFFmpeg([
                 "-y",
-                "-i",
-                filePath,
-                "-vf",
-                filterGraph,
-                "-c:v",
-                "libx264",
-                "-preset",
-                "fast",
-                "-crf",
-                "23",
-                "-c:a",
-                "copy",
+                "-i", filePath,
+                "-vf", filterGraph,
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-crf", "23",
+                "-c:a", "copy",
                 outPath,
             ]);
 
