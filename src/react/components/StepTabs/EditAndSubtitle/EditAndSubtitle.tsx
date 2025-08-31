@@ -6,16 +6,13 @@ import { useClipSelectionStore } from "../../../store/StepTabs/clipSelectionStor
 import { Card, CardContent } from "../../ui/card";
 import { Button } from "../../ui/button";
 import EditClipModal from "./EditClipModal";
-import SubtitleModal from "./Editor/SubtitleModal";
 
 export default function EditSubtitleTab() {
     const { absolutePath } = useUploadStore();
-    const { clipCandidates, setClipFilePath, setClipCandidates } =
-        useClipSelectionStore();
+    const { clipCandidates, setClipFilePath } = useClipSelectionStore();
 
     const [loading, setLoading] = useState(false);
-    const [editingClipIndex, setEditingClipIndex] = useState<number | null>(null);
-    const [subtitleClipIndex, setSubtitleClipIndex] = useState<number | null>(null);
+    const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
     const handleGenerateClips = async () => {
         if (!absolutePath || clipCandidates.length === 0) {
@@ -60,7 +57,8 @@ export default function EditSubtitleTab() {
     if (absolutePath && clipCandidates.length === 0) {
         return (
             <div className="text-center text-muted-foreground py-10">
-                Transcript clips JSON not found or empty. Please upload or generate a ViralClips.json
+                Transcript clips JSON not found or empty. Please upload or generate a
+                ViralClips.json
             </div>
         );
     }
@@ -130,15 +128,8 @@ export default function EditSubtitleTab() {
 
                             <div className="flex gap-2">
                                 {/* ✅ Edit Button */}
-                                <Button size="sm" onClick={() => setEditingClipIndex(i)}>
+                                <Button size="sm" onClick={() => setEditingIndex(i)}>
                                     Edit
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    variant="secondary"
-                                    onClick={() => setSubtitleClipIndex(i)}
-                                >
-                                    Add Subtitles
                                 </Button>
                             </div>
                         </CardContent>
@@ -146,37 +137,17 @@ export default function EditSubtitleTab() {
                 ))}
             </div>
 
-            {/* ✅ Edit Modal */}
-            {editingClipIndex !== null && (
+            {/* ✅ Editing Modal */}
+            {editingIndex !== null && clipCandidates[editingIndex]?.filePath && (
                 <EditClipModal
-                    open={editingClipIndex !== null}
-                    onClose={() => setEditingClipIndex(null)}
-                    clip={clipCandidates[editingClipIndex]}
-                    onSave={(newPath, newStart, newEnd) => {
-                        setClipFilePath(editingClipIndex, newPath);
-
-                        // update times without mutating
-                        const updated = [...clipCandidates];
-                        updated[editingClipIndex] = {
-                            ...updated[editingClipIndex],
-                            startTime: newStart,
-                            endTime: newEnd,
-                        };
-                        setClipCandidates(updated);
+                    open={editingIndex !== null}
+                    onClose={() => setEditingIndex(null)}
+                    clip={{
+                        filePath: clipCandidates[editingIndex].filePath!,
+                        index: editingIndex,
                     }}
-                />
-            )}
-
-            {/* ✅ Subtitle Modal */}
-            {subtitleClipIndex !== null && (
-                <SubtitleModal
-                    open={subtitleClipIndex !== null}
-                    onClose={() => setSubtitleClipIndex(null)}
-                    clip={clipCandidates[subtitleClipIndex]}
-                    index={subtitleClipIndex}
                     onSave={(newPath) => {
-                        // Replace clip path in store/state
-                        setClipFilePath(subtitleClipIndex, newPath);
+                        setClipFilePath(editingIndex, newPath);
                     }}
                 />
             )}

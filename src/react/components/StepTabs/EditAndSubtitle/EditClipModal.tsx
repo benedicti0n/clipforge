@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
     Dialog,
     DialogContent,
@@ -9,14 +9,20 @@ import {
     DialogFooter,
 } from "../../ui/dialog";
 import { Button } from "../../ui/button";
-import { Slider } from "../../ui/slider";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../ui/tabs";
+
+import TranscriptPanel from "./TranscriptPanel";
+import SubtitleStylePanel from "./SubtitleStylePanel";
+import CustomTextsPanel from "./CustomTextsPanel";
+import ClipOptionsPanel from "./ClipOptionsPanel";
+
+import type { SubtitleEntry, SubtitleStyle, CustomText } from "../../../../types/subtitleTypes";
 
 interface EditClipModalProps {
     open: boolean;
     onClose: () => void;
-    clip: { filePath: string };
-    onSave: (newPath: string, newStart: string, newEnd: string) => void;
-    index: number;
+    clip: { filePath: string; index: number };
+    onSave: (newPath: string) => void;
 }
 
 export default function EditClipModal({
@@ -24,101 +30,145 @@ export default function EditClipModal({
     onClose,
     clip,
     onSave,
-    index,
 }: EditClipModalProps) {
-    const [clipDuration, setClipDuration] = useState<number>(0);
-    const [range, setRange] = useState<[number, number]>([0, 0]);
     const videoRef = useRef<HTMLVideoElement>(null);
 
-    // --- Helpers ---
-    function toSrtTime(seconds: number) {
-        const h = Math.floor(seconds / 3600).toString().padStart(2, "0");
-        const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, "0");
-        const s = Math.floor(seconds % 60).toString().padStart(2, "0");
-        return `${h}:${m}:${s},000`;
-    }
+    // State
+    const [subtitles, setSubtitles] = useState<SubtitleEntry[]>([]);
+    const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyle>({
+        fontSize: 28,
+        fontColor: "#ffffff",
+        strokeColor: "#000000",
+        fontFamily: "Arial",
+        x: 50,
+        y: 90,
+    });
+    const [customTexts, setCustomTexts] = useState<CustomText[]>([]);
+    const [accurateCuts, setAccurateCuts] = useState(false);
 
-    // Load duration of this clip
-    useEffect(() => {
-        if (clip.filePath) {
-            const vid = document.createElement("video");
-            vid.src = `file://${clip.filePath}`;
-            vid.onloadedmetadata = () => {
-                const dur = vid.duration;
-                setClipDuration(dur);
-                setRange([0, dur]); // initialize slider to full clip length
-            };
-        }
-    }, [clip.filePath]);
-
-    // Handle Save
+    // Save (burn with Skia/FFmpeg)
     const handleSave = async () => {
-        const [newStartSec, newEndSec] = range;
-
-        const newPath: string = await window.electron?.ipcRenderer.invoke("clip:trim", {
-            filePath: clip.filePath, // trim inside the clip
-            startTime: toSrtTime(newStartSec),
-            endTime: toSrtTime(newEndSec),
-            index,
-        });
-
-        onSave(newPath, toSrtTime(newStartSec), toSrtTime(newEndSec));
-        onClose();
-    };
-
-    // Loop inside trim range
-    useEffect(() => {
-        const vid = videoRef.current;
-        if (!vid) return;
-
-        const checkLoop = () => {
-            if (vid.currentTime > range[1]) {
-                vid.currentTime = range[0];
-                vid.play();
-            }
+        const payload = {
+            filePath: clip.filePath,
+            subtitles,
+            subtitleStyle,
+            customTexts,
+            index: clip.index,
+            accurate: accurateCuts,
         };
 
-        vid.addEventListener("timeupdate", checkLoop);
-        return () => vid.removeEventListener("timeupdate", checkLoop);
-    }, [range]);
+        try {
+            const newPath: string = await window.electron?.ipcRenderer.invoke(
+                "clip:addSubtitles",
+                payload
+            );
+            onSave(newPath || clip.filePath);
+            if (videoRef.current) {
+                videoRef.current.src = `file://${newPath}`;
+                videoRef.current.load();
+            }
+            onClose();
+        } catch (err) {
+            console.error("Burn failed:", err);
+            alert("Failed to export. See logs.");
+        }
+    };
+
+    useEffect(() => {
+        if (open && videoRef.current) {
+            videoRef.current.load();
+        }
+    }, [open]);
 
     return (
         <Dialog open={open} onOpenChange={onClose}>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-hidden">
                 <DialogHeader>
                     <DialogTitle>Edit Clip</DialogTitle>
                 </DialogHeader>
 
-                <div className="space-y-4">
-                    <video
-                        ref={videoRef}
-                        src={`file://${clip.filePath}`}
-                        controls
-                        className="w-full rounded"
-                    />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[70vh]">
+                    {/* Left: Video Preview */}
+                    <div className="relative bg-black rounded flex flex-col">
+                        <video
+                            ref={videoRef}
+                            src={`file://${clip.filePath}`}
+                            controls
+                            className="w-full h-full object-contain"
+                        />
 
-                    {/* 🎯 Double thumb slider for range */}
-                    <Slider
-                        min={0}
-                        max={clipDuration}
-                        step={1}
-                        value={range}
-                        onValueChange={(val: number[]) =>
-                            setRange([val[0], val[1]] as [number, number])
-                        }
-                    />
+                        {/* Live overlay (for preview only) */}
+                        {subtitles.length > 0 && (
+                            <div
+                                className="absolute pointer-events-none text-center"
+                                style={{
+                                    top: `${subtitleStyle.y}%`,
+                                    left: `${subtitleStyle.x}%`,
+                                    transform: "translate(-50%, -50%)",
+                                    fontSize: `${subtitleStyle.fontSize}px`,
+                                    color: subtitleStyle.fontColor,
+                                    fontFamily: subtitleStyle.fontFamily,
+                                    WebkitTextStroke: `1px ${subtitleStyle.strokeColor}`,
+                                }}
+                            >
+                                {subtitles[0].text}
+                            </div>
+                        )}
+                        {customTexts.map((t, i) => (
+                            <div
+                                key={i}
+                                className="absolute pointer-events-none"
+                                style={{
+                                    top: `${t.y}%`,
+                                    left: `${t.x}%`,
+                                    transform: "translate(-50%, -50%)",
+                                    fontSize: `${t.fontSize}px`,
+                                    color: t.fontColor,
+                                    fontFamily: t.fontFamily,
+                                    WebkitTextStroke: `1px ${t.strokeColor}`,
+                                }}
+                            >
+                                {t.text}
+                            </div>
+                        ))}
+                    </div>
 
-                    <div className="flex justify-between text-sm text-muted-foreground">
-                        <span>Start: {toSrtTime(range[0])}</span>
-                        <span>End: {toSrtTime(range[1])}</span>
+                    {/* Right: Editors */}
+                    <div className="flex flex-col overflow-y-auto">
+                        <Tabs defaultValue="transcript" className="flex-1 flex flex-col">
+                            <TabsList className="grid grid-cols-4 mb-2">
+                                <TabsTrigger value="transcript">Transcript</TabsTrigger>
+                                <TabsTrigger value="style">Style</TabsTrigger>
+                                <TabsTrigger value="custom">Custom</TabsTrigger>
+                                <TabsTrigger value="options">Options</TabsTrigger>
+                            </TabsList>
+
+                            <TabsContent value="transcript" className="flex-1 overflow-y-auto">
+                                <TranscriptPanel
+                                    subtitles={subtitles}
+                                    setSubtitles={setSubtitles}
+                                    videoPath={clip.filePath}
+                                />
+                            </TabsContent>
+
+                            <TabsContent value="style" className="flex-1 overflow-y-auto">
+                                <SubtitleStylePanel style={subtitleStyle} setStyle={setSubtitleStyle} />
+                            </TabsContent>
+
+                            <TabsContent value="custom" className="flex-1 overflow-y-auto">
+                                <CustomTextsPanel texts={customTexts} setTexts={setCustomTexts} />
+                            </TabsContent>
+
+                            <TabsContent value="options" className="flex-1 overflow-y-auto">
+                                <ClipOptionsPanel accurate={accurateCuts} setAccurate={setAccurateCuts} />
+                            </TabsContent>
+                        </Tabs>
                     </div>
                 </div>
 
                 <DialogFooter>
-                    <Button variant="ghost" onClick={onClose}>
-                        Cancel
-                    </Button>
-                    <Button onClick={handleSave}>Save Trim</Button>
+                    <Button variant="ghost" onClick={onClose}>Cancel</Button>
+                    <Button onClick={handleSave}>Save & Export</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
