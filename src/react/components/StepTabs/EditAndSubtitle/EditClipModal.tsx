@@ -46,7 +46,11 @@ export default function EditClipModal({
     const [customTexts, setCustomTexts] = useState<CustomText[]>([]);
     const [accurateCuts, setAccurateCuts] = useState(false);
 
-    // Save (burn with Skia/FFmpeg)
+    // Rendering state
+    const [progress, setProgress] = useState(0);
+    const [rendering, setRendering] = useState(false);
+
+    // Save (burn with Skia)
     const handleSave = async () => {
         const payload = {
             filePath: clip.filePath,
@@ -58,21 +62,51 @@ export default function EditClipModal({
         };
 
         try {
-            const newPath: string = await window.electron?.ipcRenderer.invoke(
-                "clip:addSubtitles",
-                payload
-            );
-            onSave(newPath || clip.filePath);
-            if (videoRef.current) {
-                videoRef.current.src = `file://${newPath}`;
-                videoRef.current.load();
-            }
-            onClose();
+            setRendering(true);
+            setProgress(0);
+
+            // Trigger rendering
+            await window.electron?.ipcRenderer.invoke("skia:render", payload);
+            // Renderer doesn’t need to await full encode —
+            // progress + done will update state
         } catch (err) {
-            console.error("Burn failed:", err);
+            console.error("Render failed:", err);
             alert("Failed to export. See logs.");
+            setRendering(false);
         }
     };
+
+    useEffect(() => {
+        if (!window.electron?.ipcRenderer) return;
+
+        const disposeProgress = window.electron.ipcRenderer.on(
+            "skia:progress",
+            (_: any, data: { frame: number; total: number; percent: number }) => {
+                setProgress(data.percent);
+            }
+        );
+
+        const disposeDone = window.electron.ipcRenderer.on(
+            "skia:done",
+            (_: any, data: { outPath: string }) => {
+                setRendering(false);
+                setProgress(100);
+                onSave(data.outPath || clip.filePath);
+
+                if (videoRef.current) {
+                    videoRef.current.src = `file://${data.outPath}`;
+                    videoRef.current.load();
+                }
+
+                onClose();
+            }
+        );
+
+        return () => {
+            disposeProgress?.();
+            disposeDone?.();
+        };
+    }, [onSave, onClose, clip.filePath]);
 
     useEffect(() => {
         if (open && videoRef.current) {
@@ -97,7 +131,7 @@ export default function EditClipModal({
                             className="w-full h-full object-contain"
                         />
 
-                        {/* Live overlay (for preview only) */}
+                        {/* Live preview overlays (not burned yet) */}
                         {subtitles.length > 0 && (
                             <div
                                 className="absolute pointer-events-none text-center"
@@ -166,9 +200,30 @@ export default function EditClipModal({
                     </div>
                 </div>
 
-                <DialogFooter>
-                    <Button variant="ghost" onClick={onClose}>Cancel</Button>
-                    <Button onClick={handleSave}>Save & Export</Button>
+                {/* Footer with progress */}
+                <DialogFooter className="flex flex-col gap-2">
+                    {rendering && (
+                        <div className="w-full">
+                            <p className="text-xs text-muted-foreground mb-1">
+                                Rendering... {progress}%
+                            </p>
+                            <div className="w-full h-2 bg-gray-200 rounded">
+                                <div
+                                    className="h-2 bg-blue-500 rounded"
+                                    style={{ width: `${progress}%` }}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex w-full justify-end gap-2">
+                        <Button variant="ghost" onClick={onClose} disabled={rendering}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleSave} disabled={rendering}>
+                            {rendering ? "Rendering..." : "Save & Export"}
+                        </Button>
+                    </div>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
