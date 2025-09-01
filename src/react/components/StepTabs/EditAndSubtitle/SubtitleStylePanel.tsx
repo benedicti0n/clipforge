@@ -116,6 +116,20 @@ export default function SubtitleStylePanel({ style, setStyle }: SubtitleStylePan
                             }
                         />
                     </div>
+
+                    {/* Padding */}
+                    <div>
+                        <label className="text-sm">Padding</label>
+                        <Slider
+                            min={0}
+                            max={50}
+                            step={1}
+                            value={[style.backgroundPadding]}
+                            onValueChange={(v) =>
+                                setStyle({ ...style, backgroundPadding: v[0] })
+                            }
+                        />
+                    </div>
                 </div>
             )}
 
@@ -138,6 +152,19 @@ export default function SubtitleStylePanel({ style, setStyle }: SubtitleStylePan
                     onValueChange={(v) => setStyle({ ...style, y: v[0] })}
                 />
             </div>
+
+            {/* Opacity */}
+            <div>
+                <label className="text-sm">Opacity</label>
+                <Slider
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={[style.opacity]}
+                    onValueChange={(v) => setStyle({ ...style, opacity: v[0] })}
+                />
+            </div>
+
         </div>
     );
 }

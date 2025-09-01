@@ -11,13 +11,15 @@ export interface SubtitleStyle {
     fontColor: string;
     strokeColor: string;
     fontFamily: string;
-    x: number; // %
-    y: number; // %
-    strokeWidth: number; // NEW
+    x: number;
+    y: number;
+    strokeWidth: number;
     backgroundEnabled: boolean;
     backgroundColor: string;
-    backgroundOpacity: number; // 0–100 %
-    backgroundRadius: number;  // NEW border radius
+    backgroundOpacity: number;
+    backgroundRadius: number;
+    backgroundPadding: number;
+    opacity: number;
 }
 
 export interface CustomText {

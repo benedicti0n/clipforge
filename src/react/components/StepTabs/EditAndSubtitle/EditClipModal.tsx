@@ -47,6 +47,8 @@ export default function EditClipModal({
         backgroundColor: "#000000",
         backgroundOpacity: 50,
         backgroundRadius: 4,
+        backgroundPadding: 10,
+        opacity: 100,
     });
     const [customTexts, setCustomTexts] = useState<CustomText[]>([]);
     const [accurateCuts, setAccurateCuts] = useState(false);
@@ -160,6 +162,9 @@ export default function EditClipModal({
                                             .padStart(2, "0")}`
                                         : "transparent",
                                     borderRadius: subtitleStyle.backgroundRadius,
+                                    padding: `${subtitleStyle.backgroundPadding}px`,
+                                    display: "inline-block",
+                                    opacity: subtitleStyle.opacity / 100,
                                 }}
                             >
                                 {subtitles[0].text}
@@ -178,6 +183,7 @@ export default function EditClipModal({
                                     fontFamily: t.fontFamily,
                                     WebkitTextStroke: `${subtitleStyle.strokeWidth}px ${t.strokeColor}`,
                                     borderRadius: subtitleStyle.backgroundRadius,
+                                    opacity: subtitleStyle.opacity / 100,
                                 }}
                             >
                                 {t.text}

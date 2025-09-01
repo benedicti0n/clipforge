@@ -175,8 +175,8 @@ export default function TranscriptPanel({
                     <div
                         key={i}
                         className={`p-2 rounded border cursor-pointer ${activeIndex === i
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted"
                             }`}
                         onClick={() => setActiveIndex(i)}
                     >
