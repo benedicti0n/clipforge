@@ -1,7 +1,6 @@
-import { ipcMain, shell } from "electron";
+import { ipcMain, shell, app } from "electron";
 import fs from "fs/promises";
 import path from "path";
-import { app } from "electron";
 
 export function registerSavedHandlers() {
     ipcMain.handle("saved:list", async () => {
@@ -11,10 +10,11 @@ export function registerSavedHandlers() {
             clip: path.join(userData, "clips"),
             font: path.join(userData, "fonts"),
             video: path.join(userData, "uploads"),
+            bgmusic: path.join(userData, "bgmusic"),
+            preset: path.join(userData, "presets"),
         };
 
-        const items: { name: string; type: "clip" | "video" | "font"; path: string; size: number }[] =
-            [];
+        const items: { name: string; type: string; path: string; size: number }[] = [];
 
         for (const [type, dir] of Object.entries(dirs)) {
             try {
@@ -23,11 +23,11 @@ export function registerSavedHandlers() {
                     const fullPath = path.join(dir, f);
                     const stat = await fs.stat(fullPath);
                     if (stat.isFile()) {
-                        items.push({ name: f, type: type as any, path: fullPath, size: stat.size });
+                        items.push({ name: f, type, path: fullPath, size: stat.size });
                     }
                 }
             } catch {
-                // folder may not exist yet
+                // dir may not exist
             }
         }
 

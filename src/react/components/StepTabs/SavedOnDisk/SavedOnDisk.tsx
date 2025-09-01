@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 
 interface SavedItem {
     name: string;
-    type: "clip" | "video" | "font";
+    type: "clip" | "video" | "font" | "bgmusic" | "preset";
     path: string;
     size: number; // in bytes
 }
@@ -48,44 +48,60 @@ export default function SavedOnDisk() {
         clip: sortedItems.filter((i) => i.type === "clip"),
         video: sortedItems.filter((i) => i.type === "video"),
         font: sortedItems.filter((i) => i.type === "font"),
+        bgmusic: sortedItems.filter((i) => i.type === "bgmusic"),
+        preset: sortedItems.filter((i) => i.type === "preset"),
     };
 
-    const renderGroup = (title: string, items: SavedItem[]) => (
-        <div className="space-y-2">
-            <h3 className="text-md font-semibold">{title}</h3>
-            {items.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No {title.toLowerCase()} found.</p>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {items.map((item, idx) => (
-                        <div key={idx} className="border rounded p-3 flex justify-between items-center">
-                            <div className="flex-1">
-                                <p className="font-medium">{item.name}</p>
-                                <p className="text-xs text-muted-foreground">{(item.size / 1024).toFixed(1)} KB</p>
-                                <p className="text-xs break-all">{item.path}</p>
+    const renderGroup = (title: string, type: keyof typeof grouped) => {
+        const items = grouped[type];
+        return (
+            <div className="space-y-2">
+                <h3 className="text-md font-semibold">{title}</h3>
+                {items.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No {title.toLowerCase()} found.</p>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {items.map((item, idx) => (
+                            <div key={idx} className="border rounded p-3 flex justify-between items-center">
+                                <div className="flex-1">
+                                    <p className="font-medium">{item.name}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {(item.size / 1024).toFixed(1)} KB
+                                    </p>
+                                    <p className="text-xs break-all">{item.path}</p>
+
+                                    {/* Special preview for bg music */}
+                                    {item.type === "bgmusic" && (
+                                        <audio
+                                            controls
+                                            src={`file://${item.path}`}
+                                            className="mt-1 w-full"
+                                        />
+                                    )}
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => window.electron?.ipcRenderer.invoke("saved:open", item.path)}
+                                    >
+                                        Open
+                                    </Button>
+                                    <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        onClick={() => deleteItem(item.path)}
+                                    >
+                                        Delete
+                                    </Button>
+                                </div>
                             </div>
-                            <div className="flex gap-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => window.electron?.ipcRenderer.invoke("saved:open", item.path)}
-                                >
-                                    Open
-                                </Button>
-                                <Button
-                                    variant="destructive"
-                                    size="sm"
-                                    onClick={() => deleteItem(item.path)}
-                                >
-                                    Delete
-                                </Button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     if (loading) {
         return <div className="p-4">Loading saved items...</div>;
@@ -106,9 +122,11 @@ export default function SavedOnDisk() {
                 </Select>
             </div>
 
-            {renderGroup("Clips", grouped.clip)}
-            {renderGroup("Uploads", grouped.video)}
-            {renderGroup("Fonts", grouped.font)}
+            {renderGroup("Clips", "clip")}
+            {renderGroup("Uploads", "video")}
+            {renderGroup("Fonts", "font")}
+            {renderGroup("Background Music", "bgmusic")}
+            {renderGroup("Presets", "preset")}
         </div>
     );
 }
