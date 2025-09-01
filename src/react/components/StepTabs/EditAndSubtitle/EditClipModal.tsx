@@ -18,6 +18,7 @@ import ClipOptionsPanel from "./ClipOptionsPanel";
 
 import type { SubtitleEntry, SubtitleStyle, CustomText } from "../../../../types/subtitleTypes";
 import PresetPanel from "./PresetPanel";
+import BgMusicPanel from "./BgMusicPanel";
 
 interface EditClipModalProps {
     open: boolean;
@@ -34,6 +35,7 @@ export default function EditClipModal({
 }: EditClipModalProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [uploadedFonts, setUploadedFonts] = useState<{ name: string; path: string }[]>([]);
+    const [bgMusic, setBgMusic] = useState<{ path: string; volume: number } | null>(null);
 
     // State
     const [subtitles, setSubtitles] = useState<SubtitleEntry[]>([]);
@@ -71,6 +73,7 @@ export default function EditClipModal({
             customTexts,
             index: clip.index,
             fonts: uploadedFonts, // ✅ already { name, path }
+            bgMusic: bgMusic || undefined,
         };
 
         try {
@@ -221,7 +224,8 @@ export default function EditClipModal({
                                 <TabsTrigger value="style">Style</TabsTrigger>
                                 <TabsTrigger value="custom">Custom</TabsTrigger>
                                 <TabsTrigger value="presets">Presets</TabsTrigger>
-                                <TabsTrigger value="options">Options</TabsTrigger>
+                                <TabsTrigger value="bgmusic">Bg Music</TabsTrigger>
+                                {/* <TabsTrigger value="options">Options</TabsTrigger> */}
                             </TabsList>
 
                             <TabsContent value="transcript" className="flex-1 overflow-y-auto">
@@ -254,9 +258,13 @@ export default function EditClipModal({
                                 />
                             </TabsContent>
 
-                            <TabsContent value="options" className="flex-1 overflow-y-auto">
-                                <ClipOptionsPanel accurate={accurateCuts} setAccurate={setAccurateCuts} />
+                            <TabsContent value="bgmusic" className="flex-1 overflow-y-auto">
+                                <BgMusicPanel bgMusic={bgMusic} setBgMusic={setBgMusic} />
                             </TabsContent>
+
+                            {/* <TabsContent value="options" className="flex-1 overflow-y-auto">
+                                <ClipOptionsPanel accurate={accurateCuts} setAccurate={setAccurateCuts} />
+                            </TabsContent> */}
                         </Tabs>
                     </div>
                 </div>
