@@ -42,6 +42,7 @@ export default function EditClipModal({
         fontFamily: "Arial",
         x: 50,
         y: 90,
+        strokeWidth: 2, // default
     });
     const [customTexts, setCustomTexts] = useState<CustomText[]>([]);
     const [accurateCuts, setAccurateCuts] = useState(false);
@@ -146,7 +147,7 @@ export default function EditClipModal({
                                     fontSize: `${subtitleStyle.fontSize}px`,
                                     color: subtitleStyle.fontColor,
                                     fontFamily: subtitleStyle.fontFamily,
-                                    WebkitTextStroke: `1px ${subtitleStyle.strokeColor}`,
+                                    WebkitTextStroke: `${subtitleStyle.strokeWidth}px ${subtitleStyle.strokeColor}`,
                                 }}
                             >
                                 {subtitles[0].text}
@@ -163,7 +164,7 @@ export default function EditClipModal({
                                     fontSize: `${t.fontSize}px`,
                                     color: t.fontColor,
                                     fontFamily: t.fontFamily,
-                                    WebkitTextStroke: `1px ${t.strokeColor}`,
+                                    WebkitTextStroke: `${subtitleStyle.strokeWidth}px ${t.strokeColor}`,
                                 }}
                             >
                                 {t.text}

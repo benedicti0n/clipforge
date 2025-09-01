@@ -91,7 +91,7 @@ export function registerSkiaHandlers() {
                 ctx.font = `${subtitleStyle.fontSize || 24}px ${subtitleStyle.fontFamily || "Arial"}`;
                 ctx.fillStyle = subtitleStyle.fontColor;
                 ctx.strokeStyle = subtitleStyle.strokeColor;
-                ctx.lineWidth = 2;
+                ctx.lineWidth = subtitleStyle.strokeWidth || 2;
 
                 activeSubs.forEach((sub) => {
                     const x = clamp((img.width * subtitleStyle.x) / 100, 0, img.width);

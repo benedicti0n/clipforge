@@ -7,12 +7,13 @@ export interface SubtitleEntry {
 }
 
 export interface SubtitleStyle {
-    fontSize: number;     // px
-    fontColor: string;    // "#RRGGBB"
-    strokeColor: string;  // "#RRGGBB"
-    fontFamily: string;   // "Arial", "Helvetica", etc.
-    x: number;            // 0..100 (percentage across width)
-    y: number;            // 0..100 (percentage across height)
+    fontSize: number;
+    fontColor: string;
+    strokeColor: string;
+    fontFamily: string;
+    x: number; // %
+    y: number; // %
+    strokeWidth: number; // NEW
 }
 
 export interface CustomText {

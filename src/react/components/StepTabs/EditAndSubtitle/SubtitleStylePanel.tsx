@@ -2,7 +2,6 @@
 
 import { Slider } from "../../ui/slider";
 import { Input } from "../../ui/input";
-
 import type { SubtitleStyle } from "../../../../types/subtitleTypes";
 
 interface SubtitleStylePanelProps {
@@ -15,8 +14,9 @@ export default function SubtitleStylePanel({ style, setStyle }: SubtitleStylePan
         <div className="space-y-3">
             <h4 className="font-semibold text-sm">Subtitle Style</h4>
 
+            {/* Font Size */}
             <div className="flex items-center gap-3">
-                <label className="text-sm w-20">Font Size</label>
+                <label className="text-sm w-24">Font Size</label>
                 <Slider
                     min={12}
                     max={72}
@@ -26,6 +26,19 @@ export default function SubtitleStylePanel({ style, setStyle }: SubtitleStylePan
                 />
             </div>
 
+            {/* Stroke Width */}
+            <div className="flex items-center gap-3">
+                <label className="text-sm w-24">Stroke Width</label>
+                <Slider
+                    min={0}
+                    max={10}
+                    step={1}
+                    value={[style.strokeWidth]}
+                    onValueChange={(v) => setStyle({ ...style, strokeWidth: v[0] })}
+                />
+            </div>
+
+            {/* Colors */}
             <div className="grid grid-cols-2 gap-2">
                 <Input
                     type="color"
@@ -39,6 +52,7 @@ export default function SubtitleStylePanel({ style, setStyle }: SubtitleStylePan
                 />
             </div>
 
+            {/* Font Family */}
             <select
                 className="border rounded p-1 w-full"
                 value={style.fontFamily}
@@ -51,6 +65,7 @@ export default function SubtitleStylePanel({ style, setStyle }: SubtitleStylePan
                 <option value="Verdana">Verdana</option>
             </select>
 
+            {/* Position */}
             <div className="space-y-2">
                 <label className="text-sm">Position X</label>
                 <Slider
