@@ -7,6 +7,7 @@ import { registerKeysHandlers } from "./keys.js";
 import { registerSkiaHandlers } from './Skia/skia.js'
 import { registerFontHandlers } from "./fonts.js"
 import { registerSavedHandlers } from "./saved.js"
+import { registerPresetHandlers } from "./preset.js"
 /**
  * Register all IPC handlers across the app.
  * Call this once from main.ts after app.whenReady().
@@ -21,4 +22,5 @@ export function registerIpcHandlers() {
     registerSkiaHandlers();
     registerFontHandlers();
     registerSavedHandlers();
+    registerPresetHandlers();
 }

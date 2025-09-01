@@ -17,6 +17,7 @@ import CustomTextsPanel from "./CustomTextsPanel";
 import ClipOptionsPanel from "./ClipOptionsPanel";
 
 import type { SubtitleEntry, SubtitleStyle, CustomText } from "../../../../types/subtitleTypes";
+import PresetPanel from "./PresetPanel";
 
 interface EditClipModalProps {
     open: boolean;
@@ -215,10 +216,11 @@ export default function EditClipModal({
                     {/* Right: Editors */}
                     <div className="flex flex-col overflow-y-auto">
                         <Tabs defaultValue="transcript" className="flex-1 flex flex-col">
-                            <TabsList className="grid grid-cols-4 mb-2">
+                            <TabsList className="grid grid-cols-5 mb-2">
                                 <TabsTrigger value="transcript">Transcript</TabsTrigger>
                                 <TabsTrigger value="style">Style</TabsTrigger>
                                 <TabsTrigger value="custom">Custom</TabsTrigger>
+                                <TabsTrigger value="presets">Presets</TabsTrigger>
                                 <TabsTrigger value="options">Options</TabsTrigger>
                             </TabsList>
 
@@ -241,6 +243,15 @@ export default function EditClipModal({
 
                             <TabsContent value="custom" className="flex-1 overflow-y-auto">
                                 <CustomTextsPanel texts={customTexts} setTexts={setCustomTexts} />
+                            </TabsContent>
+
+                            <TabsContent value="presets" className="flex-1 overflow-y-auto">
+                                <PresetPanel
+                                    subtitleStyle={subtitleStyle}
+                                    setSubtitleStyle={setSubtitleStyle}
+                                    customTexts={customTexts}
+                                    setCustomTexts={setCustomTexts}
+                                />
                             </TabsContent>
 
                             <TabsContent value="options" className="flex-1 overflow-y-auto">
