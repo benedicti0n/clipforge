@@ -122,7 +122,6 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
                 const parsed = JSON.parse(text);
                 if (Array.isArray(parsed)) {
                     setClipCandidates(parsed);
-                    alert("✅ ViralClips.json uploaded successfully!");
                 } else {
                     alert("⚠️ Invalid JSON format. Expected an array.");
                 }
