@@ -33,4 +33,8 @@ export interface CustomText {
     fontFamily: string;
     x: number;            // 0..100 (%)
     y: number;            // 0..100 (%)
+    bold?: boolean;
+    italic?: boolean;
+    underline?: boolean;
+    opacity?: number;
 }

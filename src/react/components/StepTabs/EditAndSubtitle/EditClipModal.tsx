@@ -189,12 +189,15 @@ export default function EditClipModal({
                                     color: t.fontColor,
                                     fontFamily: t.fontFamily,
                                     WebkitTextStroke: `${subtitleStyle.strokeWidth}px ${t.strokeColor}`,
-                                    borderRadius: subtitleStyle.backgroundRadius,
-                                    opacity: subtitleStyle.opacity / 100,
+                                    opacity: (t.opacity ?? 100) / 100,
+                                    fontWeight: t.bold ? "bold" : "normal",
+                                    fontStyle: t.italic ? "italic" : "normal",
+                                    textDecoration: t.underline ? "underline" : "none",
                                 }}
                             >
                                 {t.text}
                             </div>
+
                         ))}
                     </div>
 
