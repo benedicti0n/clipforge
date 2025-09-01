@@ -22,7 +22,7 @@ export function drawSubtitles(
     const style = subtitleStyle.italic ? "italic" : "normal";
     ctx.font = `${style} ${weight} ${subtitleStyle.fontSize || 24}px ${subtitleStyle.fontFamily || "Arial"}`;
     ctx.strokeStyle = subtitleStyle.strokeColor;
-    ctx.lineWidth = subtitleStyle.strokeWidth || 2;
+    ctx.lineWidth = subtitleStyle.strokeWidth || 1;
 
     // opacity
     ctx.globalAlpha = (subtitleStyle.opacity ?? 100) / 100;

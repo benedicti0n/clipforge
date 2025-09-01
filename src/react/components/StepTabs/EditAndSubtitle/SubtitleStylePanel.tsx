@@ -3,13 +3,46 @@ import { Input } from "../../ui/input";
 import { Switch } from "../../ui/switch";  // ✅ add this
 
 import type { SubtitleStyle } from "../../../../types/subtitleTypes";
+import { loadFontToCSS } from "../../../utils/fontManager";
+import path from "path";
+import { useEffect } from "react";
 
 interface SubtitleStylePanelProps {
     style: SubtitleStyle;
     setStyle: (style: SubtitleStyle) => void;
+    uploadedFonts: { name: string; path: string }[];
+    setUploadedFonts: React.Dispatch<React.SetStateAction<{ name: string; path: string }[]>>;
+
 }
 
-export default function SubtitleStylePanel({ style, setStyle }: SubtitleStylePanelProps) {
+
+export default function SubtitleStylePanel({ style, setStyle, uploadedFonts, setUploadedFonts }: SubtitleStylePanelProps) {
+    const handleFontUpload = async (file: File) => {
+        const arrayBuffer = await file.arrayBuffer();
+        const fontName = file.name.replace(/\.(ttf|otf)$/i, "");
+        const ext = "." + (file.name.split(".").pop() || "ttf");
+
+        // 1. Inject into browser for preview
+        loadFontToCSS(fontName, file);
+
+        // 2. Persist font for Skia — always return { name, path: string }
+        const savedPath: string = await window.electron?.ipcRenderer.invoke("fonts:save", {
+            name: fontName,
+            data: arrayBuffer, // ArrayBuffer, main will wrap in Buffer
+            ext,
+        });
+
+        // 3. Update dropdown + current style
+        setUploadedFonts((prev) => [...prev, { name: fontName, path: savedPath }]);
+        setStyle({ ...style, fontFamily: fontName });
+    };
+
+
+    useEffect(() => {
+        console.log("[SubtitleStylePanel] uploadedFonts changed:", uploadedFonts);
+    }, [uploadedFonts]);
+
+
     return (
         <div className="space-y-3">
             <h4 className="font-semibold text-sm">Subtitle Style</h4>
@@ -53,17 +86,37 @@ export default function SubtitleStylePanel({ style, setStyle }: SubtitleStylePan
             </div>
 
             {/* Font Family */}
-            <select
-                className="border rounded p-1 w-full"
-                value={style.fontFamily}
-                onChange={(e) => setStyle({ ...style, fontFamily: e.target.value })}
-            >
-                <option value="Arial">Arial</option>
-                <option value="Helvetica">Helvetica</option>
-                <option value="Times New Roman">Times New Roman</option>
-                <option value="Courier New">Courier New</option>
-                <option value="Verdana">Verdana</option>
-            </select>
+            <div className="space-y-2">
+                <label className="text-sm">Font Family</label>
+                <select
+                    className="border rounded p-1 w-full"
+                    value={style.fontFamily}
+                    onChange={(e) => setStyle({ ...style, fontFamily: e.target.value })}
+                >
+                    <option value="Arial">Arial</option>
+                    <option value="Helvetica">Helvetica</option>
+                    <option value="Times New Roman">Times New Roman</option>
+                    <option value="Courier New">Courier New</option>
+                    <option value="Verdana">Verdana</option>
+
+                    {/* Uploaded fonts */}
+                    {uploadedFonts.map((f) => (
+                        <option key={f.name} value={f.name}>
+                            {f.name}
+                        </option>
+                    ))}
+                </select>
+            </div>
+
+            {/* Upload */}
+            <input
+                type="file"
+                accept=".ttf,.otf"
+                onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFontUpload(file);
+                }}
+            />
 
             {/* Text Style Controls */}
             <div className="flex gap-2">

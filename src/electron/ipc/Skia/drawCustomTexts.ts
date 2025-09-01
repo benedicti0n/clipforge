@@ -1,5 +1,6 @@
 import { clamp } from "../../helpers/skia.js";
 import type { CustomText, SubtitleStyle } from "../../../types/subtitleTypes";
+import { CanvasRenderingContext2D } from "skia-canvas";
 
 export function drawCustomTexts(
     ctx: CanvasRenderingContext2D,

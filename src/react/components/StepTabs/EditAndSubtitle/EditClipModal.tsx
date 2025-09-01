@@ -32,6 +32,7 @@ export default function EditClipModal({
     onSave,
 }: EditClipModalProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
+    const [uploadedFonts, setUploadedFonts] = useState<{ name: string; path: string }[]>([]);
 
     // State
     const [subtitles, setSubtitles] = useState<SubtitleEntry[]>([]);
@@ -39,10 +40,10 @@ export default function EditClipModal({
         fontSize: 28,
         fontColor: "#ffffff",
         strokeColor: "#000000",
+        strokeWidth: 1,
         fontFamily: "Arial",
         x: 50,
         y: 90,
-        strokeWidth: 2,
         backgroundEnabled: false,
         backgroundColor: "#000000",
         backgroundOpacity: 50,
@@ -68,23 +69,31 @@ export default function EditClipModal({
             subtitleStyle,
             customTexts,
             index: clip.index,
-            accurate: accurateCuts,
+            fonts: uploadedFonts, // ✅ already { name, path }
         };
 
         try {
             setRendering(true);
             setProgress(0);
 
-            // Trigger rendering
-            await window.electron?.ipcRenderer.invoke("skia:render", payload);
-            // Renderer doesn’t need to await full encode —
-            // progress + done will update state
+            const outPath = await window.electron?.ipcRenderer.invoke("skia:render", payload);
+
+            setRendering(false);
+            setProgress(100);
+
+            onSave(outPath || clip.filePath);
+
+            if (videoRef.current && outPath) {
+                videoRef.current.src = `file://${outPath}`;
+                videoRef.current.load();
+            }
         } catch (err) {
             console.error("Render failed:", err);
             alert("Failed to export. See logs.");
             setRendering(false);
         }
     };
+
 
     useEffect(() => {
         const ipc = window.electron?.ipcRenderer;
@@ -97,20 +106,18 @@ export default function EditClipModal({
             setProgress(data.percent);
         };
 
-        const onDone = (_event: unknown, data: { outPath: string }) => {
+        const onDone = (_event: unknown, data?: { outPath?: string }) => {
             console.log("[renderer] got skia:done", data);
-            setRendering(false);   // always reset
+            setRendering(false);
             setProgress(100);
-            onSave(data.outPath || clip.filePath);
+            onSave(data?.outPath || clip.filePath);
 
-            if (videoRef.current) {
+            if (videoRef.current && data?.outPath) {
                 videoRef.current.src = `file://${data.outPath}`;
                 videoRef.current.load();
             }
-
-            // ❌ Don’t auto-close here, let user close manually
-            // onClose();
         };
+
 
         ipc.on("skia:progress", onProgress);
         ipc.on("skia:done", onDone);
@@ -120,6 +127,10 @@ export default function EditClipModal({
             ipc.removeListener("skia:done", onDone);
         };
     }, [clip.filePath]); // only depends on clip.filePath
+
+    useEffect(() => {
+        console.log("[EditClipModal] uploadedFonts:", uploadedFonts);
+    }, [uploadedFonts]);
 
 
     useEffect(() => {
@@ -220,7 +231,12 @@ export default function EditClipModal({
                             </TabsContent>
 
                             <TabsContent value="style" className="flex-1 overflow-y-auto">
-                                <SubtitleStylePanel style={subtitleStyle} setStyle={setSubtitleStyle} />
+                                <SubtitleStylePanel
+                                    style={subtitleStyle}
+                                    setStyle={setSubtitleStyle}
+                                    uploadedFonts={uploadedFonts}
+                                    setUploadedFonts={setUploadedFonts}
+                                />
                             </TabsContent>
 
                             <TabsContent value="custom" className="flex-1 overflow-y-auto">

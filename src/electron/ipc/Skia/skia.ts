@@ -1,7 +1,7 @@
 import { ipcMain, IpcMainInvokeEvent, BrowserWindow } from "electron";
 import path from "path";
 import fs from "fs/promises";
-import { loadImage } from "skia-canvas";
+import { FontLibrary, loadImage } from "skia-canvas";
 
 import { ensureClipsDir } from "../../helpers/clip.js";
 import { runFFmpeg } from "../../helpers/ffmpeg.js";
@@ -16,13 +16,17 @@ interface SkiaPayload {
     customTexts: CustomText[];
     index: number;
     fps?: number;
+    fonts?: { name: string; path: string }[];
 }
 
 export function registerSkiaHandlers() {
     ipcMain.handle("skia:render", async (e: IpcMainInvokeEvent, payload: SkiaPayload) => {
         const { filePath, subtitles, subtitleStyle, customTexts, index, fps = 24 } = payload;
+        console.log("[Skia] Received fonts:", payload.fonts);
 
         if (!filePath) throw new Error("filePath missing");
+
+        registerFonts(payload.fonts || []);
 
         const outDir = await ensureClipsDir();
         const framesDir = path.join(outDir, `frames-${index}`);
@@ -80,7 +84,22 @@ export function registerSkiaHandlers() {
         // 5. Replace original
         await fs.rename(tempPath, outPath);
 
-        web?.webContents.send("skia:done", { outPath });
+        web?.webContents.send("skia:done", { outPath: outPath });
         return outPath;
+    });
+}
+
+function registerFonts(fonts: { name: string; path: string }[]) {
+    fonts.forEach((f) => {
+        if (f.path && typeof f.path === "string") {
+            try {
+                console.log("[Skia] Registering font:", f.name, "→", f.path);
+                FontLibrary.use({ [f.name]: f.path }); // ✅ correct mapping
+            } catch (err) {
+                console.error(`[Skia] Failed to load font ${f.name} from ${f.path}`, err);
+            }
+        } else {
+            console.warn("[Skia] Skipped invalid font entry:", f);
+        }
     });
 }
