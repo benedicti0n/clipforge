@@ -7,6 +7,7 @@ import Upload from "./components/StepTabs/Upload/Upload";
 import TranscriptionTab from "./components/StepTabs/Transcription/Transcription";
 import ClipSelection from "./components/StepTabs/ClipSelection/ClipSelection";
 import EditSubtitleTab from "./components/StepTabs/EditAndSubtitle/EditAndSubtitle";
+import SavedOnDisk from "./components/StepTabs/SavedOnDisk/SavedOnDisk";
 
 
 function App() {
@@ -31,7 +32,7 @@ function App() {
               <TabsTrigger value="transcription" className="flex-1">Transcription</TabsTrigger>
               <TabsTrigger value="clipSelection" className="flex-1">Clip Selection</TabsTrigger>
               <TabsTrigger value="editAndSubtitles" className="flex-1">Edit and Subtitles</TabsTrigger>
-              <TabsTrigger value="export" className="flex-1">Export</TabsTrigger>
+              <TabsTrigger value="saved" className="flex-1">Saved on Disk</TabsTrigger>
             </TabsList>
 
             <TabsContent value="upload">
@@ -40,7 +41,7 @@ function App() {
             <TabsContent value="transcription"><TranscriptionTab setActiveTab={setActiveTab} /></TabsContent>
             <TabsContent value="clipSelection"><ClipSelection setActiveTab={setActiveTab} /></TabsContent>
             <TabsContent value="editAndSubtitles"><EditSubtitleTab /></TabsContent>
-            <TabsContent value="export">Export tab content</TabsContent>
+            <TabsContent value="saved"><SavedOnDisk /></TabsContent>
           </Tabs>
         </div>
       </div>
