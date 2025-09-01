@@ -14,6 +14,10 @@ export interface SubtitleStyle {
     x: number; // %
     y: number; // %
     strokeWidth: number; // NEW
+    backgroundEnabled: boolean;
+    backgroundColor: string;
+    backgroundOpacity: number; // 0–100 %
+    backgroundRadius: number;  // NEW border radius
 }
 
 export interface CustomText {

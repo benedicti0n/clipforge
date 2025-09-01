@@ -1,7 +1,7 @@
-"use client";
-
 import { Slider } from "../../ui/slider";
 import { Input } from "../../ui/input";
+import { Switch } from "../../ui/switch";  // ✅ add this
+
 import type { SubtitleStyle } from "../../../../types/subtitleTypes";
 
 interface SubtitleStylePanelProps {
@@ -64,6 +64,60 @@ export default function SubtitleStylePanel({ style, setStyle }: SubtitleStylePan
                 <option value="Courier New">Courier New</option>
                 <option value="Verdana">Verdana</option>
             </select>
+
+            {/* Background Box Switch */}
+            <div className="flex items-center justify-between">
+                <label className="text-sm">Background Box</label>
+                <Switch
+                    checked={style.backgroundEnabled}
+                    onCheckedChange={(v) => setStyle({ ...style, backgroundEnabled: v })}
+                />
+            </div>
+
+            {/* Background Box Controls */}
+            {style.backgroundEnabled && (
+                <div className="space-y-3 pl-2 border-l border-gray-300 mt-2">
+                    {/* Background Color */}
+                    <div className="flex items-center gap-3">
+                        <label className="text-sm w-24">Color</label>
+                        <Input
+                            type="color"
+                            value={style.backgroundColor}
+                            onChange={(e) =>
+                                setStyle({ ...style, backgroundColor: e.target.value })
+                            }
+                        />
+                    </div>
+
+                    {/* Background Opacity */}
+                    <div>
+                        <label className="text-sm">Opacity</label>
+                        <Slider
+                            min={0}
+                            max={100}
+                            step={5}
+                            value={[style.backgroundOpacity]}
+                            onValueChange={(v) =>
+                                setStyle({ ...style, backgroundOpacity: v[0] })
+                            }
+                        />
+                    </div>
+
+                    {/* Border Radius */}
+                    <div>
+                        <label className="text-sm">Border Radius</label>
+                        <Slider
+                            min={0}
+                            max={50}
+                            step={1}
+                            value={[style.backgroundRadius]}
+                            onValueChange={(v) =>
+                                setStyle({ ...style, backgroundRadius: v[0] })
+                            }
+                        />
+                    </div>
+                </div>
+            )}
 
             {/* Position */}
             <div className="space-y-2">

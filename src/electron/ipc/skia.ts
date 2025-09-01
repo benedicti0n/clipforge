@@ -6,7 +6,7 @@ import { Canvas, loadImage } from "skia-canvas";
 import type { SubtitleEntry, SubtitleStyle, CustomText } from "../../types/subtitleTypes";
 import { ensureClipsDir } from "../helpers/clip.js";
 import { runFFmpeg } from "../helpers/ffmpeg.js";
-import { clamp } from "../helpers/skia.js";
+import { clamp, applyOpacity, drawRoundedRect } from "../helpers/skia.js";
 
 interface SkiaPayload {
     filePath: string;
@@ -49,22 +49,28 @@ export function registerSkiaHandlers() {
             // 1. Extract frames
             await runFFmpeg([
                 "-y",
-                "-i", filePath,
-                "-vf", `fps=${fps}`,
+                "-i",
+                filePath,
+                "-vf",
+                `fps=${fps}`,
                 path.join(framesDir, "frame-%05d.png"),
             ]);
 
             // 2. Extract audio separately
             await runFFmpeg([
                 "-y",
-                "-i", filePath,
+                "-i",
+                filePath,
                 "-vn", // strip video
-                "-acodec", "copy",
+                "-acodec",
+                "copy",
                 audioPath,
             ]);
 
             // 3. Process frames (draw subtitles + overlays)
-            const files = (await fs.readdir(framesDir)).filter((f) => f.endsWith(".png"));
+            const files = (await fs.readdir(framesDir)).filter((f) =>
+                f.endsWith(".png")
+            );
             const total = files.length;
 
             for (let i = 0; i < total; i++) {
@@ -88,7 +94,8 @@ export function registerSkiaHandlers() {
                 ctx.textBaseline = "middle";
 
                 // draw subs
-                ctx.font = `${subtitleStyle.fontSize || 24}px ${subtitleStyle.fontFamily || "Arial"}`;
+                ctx.font = `${subtitleStyle.fontSize || 24}px ${subtitleStyle.fontFamily || "Arial"
+                    }`;
                 ctx.fillStyle = subtitleStyle.fontColor;
                 ctx.strokeStyle = subtitleStyle.strokeColor;
                 ctx.lineWidth = subtitleStyle.strokeWidth || 2;
@@ -96,16 +103,37 @@ export function registerSkiaHandlers() {
                 activeSubs.forEach((sub) => {
                     const x = clamp((img.width * subtitleStyle.x) / 100, 0, img.width);
                     const y = clamp((img.height * subtitleStyle.y) / 100, 0, img.height);
+
+                    // ✅ background box (before text)
+                    if (subtitleStyle.backgroundEnabled) {
+                        ctx.fillStyle = applyOpacity(
+                            subtitleStyle.backgroundColor,
+                            subtitleStyle.backgroundOpacity / 100
+                        );
+
+                        const metrics = ctx.measureText(sub.text);
+                        const padding = 10;
+                        const boxWidth = metrics.width + padding * 2;
+                        const boxHeight = subtitleStyle.fontSize + padding;
+
+                        drawRoundedRect(ctx, x - boxWidth / 2, y - boxHeight / 2, boxWidth, boxHeight, subtitleStyle.backgroundRadius);
+                        ctx.fill();
+
+                        ctx.fillStyle = subtitleStyle.fontColor;
+                    }
+
+
+                    // draw text
                     ctx.strokeText(sub.text, x, y);
                     ctx.fillText(sub.text, x, y);
                 });
 
-                // draw custom overlays
+                // draw custom overlays (unchanged)
                 customTexts.forEach((t) => {
                     ctx.font = `${t.fontSize}px ${t.fontFamily}`;
                     ctx.fillStyle = t.fontColor;
                     ctx.strokeStyle = t.strokeColor;
-                    ctx.lineWidth = 2;
+                    ctx.lineWidth = subtitleStyle.strokeWidth || 2;
 
                     const x = clamp((img.width * t.x) / 100, 0, img.width);
                     const y = clamp((img.height * t.y) / 100, 0, img.height);
@@ -129,13 +157,20 @@ export function registerSkiaHandlers() {
             // 4. Re-encode frames + combine with extracted audio
             await runFFmpeg([
                 "-y",
-                "-framerate", fps.toString(),
-                "-i", path.join(framesDir, "frame-%05d.png"),
-                "-i", audioPath,
-                "-c:v", "libx264",
-                "-preset", "fast",
-                "-crf", "23",
-                "-c:a", "aac",
+                "-framerate",
+                fps.toString(),
+                "-i",
+                path.join(framesDir, "frame-%05d.png"),
+                "-i",
+                audioPath,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                "-crf",
+                "23",
+                "-c:a",
+                "aac",
                 tempPath,
             ]);
 

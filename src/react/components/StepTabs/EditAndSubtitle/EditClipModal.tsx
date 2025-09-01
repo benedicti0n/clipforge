@@ -42,7 +42,11 @@ export default function EditClipModal({
         fontFamily: "Arial",
         x: 50,
         y: 90,
-        strokeWidth: 2, // default
+        strokeWidth: 2,
+        backgroundEnabled: false,
+        backgroundColor: "#000000",
+        backgroundOpacity: 50,
+        backgroundRadius: 4,
     });
     const [customTexts, setCustomTexts] = useState<CustomText[]>([]);
     const [accurateCuts, setAccurateCuts] = useState(false);
@@ -148,6 +152,14 @@ export default function EditClipModal({
                                     color: subtitleStyle.fontColor,
                                     fontFamily: subtitleStyle.fontFamily,
                                     WebkitTextStroke: `${subtitleStyle.strokeWidth}px ${subtitleStyle.strokeColor}`,
+                                    background: subtitleStyle.backgroundEnabled
+                                        ? `${subtitleStyle.backgroundColor}${Math.round(
+                                            (subtitleStyle.backgroundOpacity / 100) * 255
+                                        )
+                                            .toString(16)
+                                            .padStart(2, "0")}`
+                                        : "transparent",
+                                    borderRadius: subtitleStyle.backgroundRadius,
                                 }}
                             >
                                 {subtitles[0].text}
@@ -165,6 +177,7 @@ export default function EditClipModal({
                                     color: t.fontColor,
                                     fontFamily: t.fontFamily,
                                     WebkitTextStroke: `${subtitleStyle.strokeWidth}px ${t.strokeColor}`,
+                                    borderRadius: subtitleStyle.backgroundRadius,
                                 }}
                             >
                                 {t.text}
