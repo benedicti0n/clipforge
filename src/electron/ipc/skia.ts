@@ -6,6 +6,7 @@ import { Canvas, loadImage } from "skia-canvas";
 import type { SubtitleEntry, SubtitleStyle, CustomText } from "../../types/subtitleTypes";
 import { ensureClipsDir } from "../helpers/clip.js";
 import { runFFmpeg } from "../helpers/ffmpeg.js";
+import { clamp } from "../helpers/skia.js";
 
 interface SkiaPayload {
     filePath: string;
@@ -36,6 +37,11 @@ export function registerSkiaHandlers() {
                 outDir,
                 `${path.parse(filePath).name}-${index}-tmp.mp4`
             );
+            // audio file path
+            const audioPath = path.join(
+                outDir,
+                `${path.parse(filePath).name}-${index}-audio.m4a`
+            );
 
             // window ref for emitting events
             const web = BrowserWindow.fromWebContents(e.sender);
@@ -48,7 +54,16 @@ export function registerSkiaHandlers() {
                 path.join(framesDir, "frame-%05d.png"),
             ]);
 
-            // 2. Process frames
+            // 2. Extract audio separately
+            await runFFmpeg([
+                "-y",
+                "-i", filePath,
+                "-vn", // strip video
+                "-acodec", "copy",
+                audioPath,
+            ]);
+
+            // 3. Process frames (draw subtitles + overlays)
             const files = (await fs.readdir(framesDir)).filter((f) => f.endsWith(".png"));
             const total = files.length;
 
@@ -73,14 +88,14 @@ export function registerSkiaHandlers() {
                 ctx.textBaseline = "middle";
 
                 // draw subs
-                ctx.font = `${subtitleStyle.fontSize}px ${subtitleStyle.fontFamily}`;
+                ctx.font = `${subtitleStyle.fontSize || 24}px ${subtitleStyle.fontFamily || "Arial"}`;
                 ctx.fillStyle = subtitleStyle.fontColor;
                 ctx.strokeStyle = subtitleStyle.strokeColor;
                 ctx.lineWidth = 2;
 
                 activeSubs.forEach((sub) => {
-                    const x = (img.width * subtitleStyle.x) / 100;
-                    const y = (img.height * subtitleStyle.y) / 100;
+                    const x = clamp((img.width * subtitleStyle.x) / 100, 0, img.width);
+                    const y = clamp((img.height * subtitleStyle.y) / 100, 0, img.height);
                     ctx.strokeText(sub.text, x, y);
                     ctx.fillText(sub.text, x, y);
                 });
@@ -92,8 +107,9 @@ export function registerSkiaHandlers() {
                     ctx.strokeStyle = t.strokeColor;
                     ctx.lineWidth = 2;
 
-                    const x = (img.width * t.x) / 100;
-                    const y = (img.height * t.y) / 100;
+                    const x = clamp((img.width * t.x) / 100, 0, img.width);
+                    const y = clamp((img.height * t.y) / 100, 0, img.height);
+
                     ctx.strokeText(t.text, x, y);
                     ctx.fillText(t.text, x, y);
                 });
@@ -110,14 +126,12 @@ export function registerSkiaHandlers() {
                 });
             }
 
-            // 3. Re-encode frames into temp video with audio
+            // 4. Re-encode frames + combine with extracted audio
             await runFFmpeg([
                 "-y",
                 "-framerate", fps.toString(),
                 "-i", path.join(framesDir, "frame-%05d.png"),
-                "-i", filePath,
-                "-map", "0:v:0",
-                "-map", "1:a:0?",
+                "-i", audioPath,
                 "-c:v", "libx264",
                 "-preset", "fast",
                 "-crf", "23",
@@ -125,7 +139,7 @@ export function registerSkiaHandlers() {
                 tempPath,
             ]);
 
-            // 4. Replace original file with temp output
+            // 5. Replace original file with temp output
             await fs.rename(tempPath, outPath);
 
             // ✅ final event

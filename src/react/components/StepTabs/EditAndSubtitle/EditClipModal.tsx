@@ -77,36 +77,40 @@ export default function EditClipModal({
     };
 
     useEffect(() => {
-        if (!window.electron?.ipcRenderer) return;
+        const ipc = window.electron?.ipcRenderer;
+        if (!ipc) return;
 
-        const disposeProgress = window.electron.ipcRenderer.on(
-            "skia:progress",
-            (_: any, data: { frame: number; total: number; percent: number }) => {
-                setProgress(data.percent);
+        const onProgress = (
+            _event: unknown,
+            data: { frame: number; total: number; percent: number }
+        ) => {
+            setProgress(data.percent);
+        };
+
+        const onDone = (_event: unknown, data: { outPath: string }) => {
+            console.log("[renderer] got skia:done", data);
+            setRendering(false);   // always reset
+            setProgress(100);
+            onSave(data.outPath || clip.filePath);
+
+            if (videoRef.current) {
+                videoRef.current.src = `file://${data.outPath}`;
+                videoRef.current.load();
             }
-        );
 
-        const disposeDone = window.electron.ipcRenderer.on(
-            "skia:done",
-            (_: any, data: { outPath: string }) => {
-                setRendering(false);
-                setProgress(100);
-                onSave(data.outPath || clip.filePath);
+            // ❌ Don’t auto-close here, let user close manually
+            // onClose();
+        };
 
-                if (videoRef.current) {
-                    videoRef.current.src = `file://${data.outPath}`;
-                    videoRef.current.load();
-                }
-
-                onClose();
-            }
-        );
+        ipc.on("skia:progress", onProgress);
+        ipc.on("skia:done", onDone);
 
         return () => {
-            disposeProgress?.();
-            disposeDone?.();
+            ipc.removeListener("skia:progress", onProgress);
+            ipc.removeListener("skia:done", onDone);
         };
-    }, [onSave, onClose, clip.filePath]);
+    }, [clip.filePath]); // only depends on clip.filePath
+
 
     useEffect(() => {
         if (open && videoRef.current) {
