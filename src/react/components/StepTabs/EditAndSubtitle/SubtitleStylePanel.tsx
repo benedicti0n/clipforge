@@ -65,6 +65,28 @@ export default function SubtitleStylePanel({ style, setStyle }: SubtitleStylePan
                 <option value="Verdana">Verdana</option>
             </select>
 
+            {/* Text Style Controls */}
+            <div className="flex gap-2">
+                <button
+                    className={`px-2 py-1 border rounded ${style.bold ? "bg-gray-200" : ""}`}
+                    onClick={() => setStyle({ ...style, bold: !style.bold })}
+                >
+                    B
+                </button>
+                <button
+                    className={`px-2 py-1 border rounded ${style.italic ? "bg-gray-200" : ""}`}
+                    onClick={() => setStyle({ ...style, italic: !style.italic })}
+                >
+                    I
+                </button>
+                <button
+                    className={`px-2 py-1 border rounded ${style.underline ? "bg-gray-200" : ""}`}
+                    onClick={() => setStyle({ ...style, underline: !style.underline })}
+                >
+                    U
+                </button>
+            </div>
+
             {/* Background Box Switch */}
             <div className="flex items-center justify-between">
                 <label className="text-sm">Background Box</label>

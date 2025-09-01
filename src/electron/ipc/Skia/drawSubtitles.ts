@@ -18,7 +18,9 @@ export function drawSubtitles(
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
-    ctx.font = `${subtitleStyle.fontSize || 24}px ${subtitleStyle.fontFamily || "Arial"}`;
+    const weight = subtitleStyle.bold ? "bold" : "normal";
+    const style = subtitleStyle.italic ? "italic" : "normal";
+    ctx.font = `${style} ${weight} ${subtitleStyle.fontSize || 24}px ${subtitleStyle.fontFamily || "Arial"}`;
     ctx.strokeStyle = subtitleStyle.strokeColor;
     ctx.lineWidth = subtitleStyle.strokeWidth || 2;
 
@@ -56,6 +58,18 @@ export function drawSubtitles(
         ctx.fillStyle = subtitleStyle.fontColor;
         ctx.strokeText(sub.text, x, y);
         ctx.fillText(sub.text, x, y);
+
+        if (subtitleStyle.underline) {
+            const metrics = ctx.measureText(sub.text);
+            const underlineY = y + (subtitleStyle.fontSize / 2); // tweak if needed
+            ctx.beginPath();
+            ctx.moveTo(x - metrics.width / 2, underlineY);
+            ctx.lineTo(x + metrics.width / 2, underlineY);
+            ctx.lineWidth = Math.max(1, subtitleStyle.strokeWidth || 2);
+            ctx.strokeStyle = subtitleStyle.fontColor;
+            ctx.stroke();
+        }
+
     });
 
     ctx.globalAlpha = 1; // reset

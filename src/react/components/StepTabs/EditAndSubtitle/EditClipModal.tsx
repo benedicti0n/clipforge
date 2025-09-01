@@ -49,6 +49,9 @@ export default function EditClipModal({
         backgroundRadius: 4,
         backgroundPadding: 10,
         opacity: 100,
+        bold: false,
+        italic: false,
+        underline: false,
     });
     const [customTexts, setCustomTexts] = useState<CustomText[]>([]);
     const [accurateCuts, setAccurateCuts] = useState(false);
@@ -165,6 +168,10 @@ export default function EditClipModal({
                                     padding: `${subtitleStyle.backgroundPadding}px`,
                                     display: "inline-block",
                                     opacity: subtitleStyle.opacity / 100,
+                                    fontWeight: subtitleStyle.bold ? "bold" : "normal",
+                                    fontStyle: subtitleStyle.italic ? "italic" : "normal",
+                                    textDecoration: subtitleStyle.underline ? "underline" : "none",
+
                                 }}
                             >
                                 {subtitles[0].text}

@@ -20,6 +20,9 @@ export interface SubtitleStyle {
     backgroundRadius: number;
     backgroundPadding: number;
     opacity: number;
+    bold?: boolean;
+    italic?: boolean;
+    underline?: boolean;
 }
 
 export interface CustomText {
