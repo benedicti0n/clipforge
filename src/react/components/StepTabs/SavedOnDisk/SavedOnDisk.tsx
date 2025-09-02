@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "../../ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "../../ui/select";
 
 interface SavedItem {
     name: string;
@@ -18,7 +24,9 @@ export default function SavedOnDisk() {
 
     const fetchItems = async () => {
         try {
-            const data: SavedItem[] = await window.electron?.ipcRenderer.invoke("saved:list");
+            const data: SavedItem[] = await window.electron?.ipcRenderer.invoke(
+                "saved:list"
+            );
             setItems(data);
         } catch (err) {
             console.error("[SavedOnDisk] Failed to fetch items:", err);
@@ -40,6 +48,20 @@ export default function SavedOnDisk() {
         }
     };
 
+    const deleteAllClips = async () => {
+        if (!confirm("Are you sure you want to delete all saved clips?")) return;
+
+        const clips = items.filter((i) => i.type === "clip");
+        for (const c of clips) {
+            try {
+                await window.electron?.ipcRenderer.invoke("saved:delete", c.path);
+            } catch (err) {
+                console.error("[SavedOnDisk] Failed to delete clip:", err);
+            }
+        }
+        setItems((prev) => prev.filter((i) => i.type !== "clip"));
+    };
+
     const sortedItems = [...items].sort((a, b) =>
         sortOrder === "asc" ? a.size - b.size : b.size - a.size
     );
@@ -52,25 +74,47 @@ export default function SavedOnDisk() {
         preset: sortedItems.filter((i) => i.type === "preset"),
     };
 
+    const formatSize = (bytes: number) => {
+        if (bytes >= 1024 * 1024 * 1024) return (bytes / 1024 / 1024 / 1024).toFixed(2) + " GB";
+        if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(2) + " MB";
+        return (bytes / 1024).toFixed(1) + " KB";
+    };
+
     const renderGroup = (title: string, type: keyof typeof grouped) => {
-        const items = grouped[type];
+        const groupItems = grouped[type];
         return (
             <div className="space-y-2">
-                <h3 className="text-md font-semibold">{title}</h3>
-                {items.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No {title.toLowerCase()} found.</p>
+                <div className="flex justify-between items-center">
+                    <h3 className="text-md font-semibold">{title}</h3>
+                    {type === "clip" && groupItems.length > 0 && (
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={deleteAllClips}
+                        >
+                            Delete All Clips
+                        </Button>
+                    )}
+                </div>
+
+                {groupItems.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                        No {title.toLowerCase()} found.
+                    </p>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {items.map((item, idx) => (
-                            <div key={idx} className="border rounded p-3 flex justify-between items-center">
+                        {groupItems.map((item, idx) => (
+                            <div
+                                key={idx}
+                                className="border rounded p-3 flex justify-between items-center"
+                            >
                                 <div className="flex-1">
                                     <p className="font-medium">{item.name}</p>
                                     <p className="text-xs text-muted-foreground">
-                                        {(item.size / 1024).toFixed(1)} KB
+                                        {formatSize(item.size)}
                                     </p>
                                     <p className="text-xs break-all">{item.path}</p>
 
-                                    {/* Special preview for bg music */}
                                     {item.type === "bgmusic" && (
                                         <audio
                                             controls
@@ -83,7 +127,9 @@ export default function SavedOnDisk() {
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        onClick={() => window.electron?.ipcRenderer.invoke("saved:open", item.path)}
+                                        onClick={() =>
+                                            window.electron?.ipcRenderer.invoke("saved:open", item.path)
+                                        }
                                     >
                                         Open
                                     </Button>
@@ -111,7 +157,10 @@ export default function SavedOnDisk() {
         <div className="p-4 space-y-6">
             <div className="flex justify-between items-center">
                 <h2 className="text-lg font-semibold">Saved on Disk</h2>
-                <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as "asc" | "desc")}>
+                <Select
+                    value={sortOrder}
+                    onValueChange={(v) => setSortOrder(v as "asc" | "desc")}
+                >
                     <SelectTrigger className="w-[160px]">
                         <SelectValue placeholder="Sort by size" />
                     </SelectTrigger>
