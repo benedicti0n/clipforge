@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Slider } from "../../ui/slider";
 import { Button } from "../../ui/button";
+import { Music } from "lucide-react";
 
 interface BgMusicPanelProps {
     bgMusic: { path: string; volume: number } | null;
@@ -42,11 +43,36 @@ export default function BgMusicPanel({ bgMusic, setBgMusic }: BgMusicPanelProps)
         refreshLibrary();
     };
 
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    const triggerFileSelect = () => {
+        fileInputRef.current?.click();
+    };
+
     return (
         <div className="space-y-4">
             <h4 className="font-semibold text-sm">Background Music</h4>
 
-            <input type="file" accept="audio/*" onChange={handleFileSelect} />
+            <div>
+                {/* Hidden native input */}
+                <input
+                    type="file"
+                    accept="audio/*"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    hidden
+                />
+
+                {/* Visible button */}
+                <Button
+                    onClick={triggerFileSelect}
+                    variant="outline"
+                    className="flex items-center gap-2"
+                >
+                    <Music className="w-4 h-4" />
+                    Upload Audio
+                </Button>
+            </div>
 
             {bgMusic && (
                 <div className="space-y-2">
