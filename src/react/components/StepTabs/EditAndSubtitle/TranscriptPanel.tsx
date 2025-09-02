@@ -7,6 +7,7 @@ import { Textarea } from "../../ui/textarea";
 import { ScrollArea } from "../../ui/scroll-area";
 
 import type { SubtitleEntry } from "../../../../types/subtitleTypes";
+import { Plus } from "lucide-react";
 
 // --- utils ---
 // parse raw SRT string → SubtitleEntry[]
@@ -153,9 +154,6 @@ export default function TranscriptPanel({
                             setWordsPerLine(Math.max(2, Math.min(12, Number(e.target.value) || 5)))
                         }
                     />
-                    <Button size="sm" onClick={addLine}>
-                        ➕
-                    </Button>
                     <Button
                         size="sm"
                         variant="outline"
@@ -163,6 +161,10 @@ export default function TranscriptPanel({
                         disabled={loading}
                     >
                         {loading ? "Transcribing..." : "Generate"}
+                    </Button>
+                    <Button size="sm" onClick={addLine} className="flex items-center gap-1">
+                        <Plus className="w-4 h-4" />
+                        Add Line
                     </Button>
                 </div>
             </div>
