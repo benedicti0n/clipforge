@@ -11,8 +11,41 @@ import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 
-// Local typing for IPC
 type ApiKey = { name: string; key: string };
+
+// ✅ Model info list
+const GEMINI_MODELS = [
+    {
+        id: "gemini-1.5-pro-latest",
+        label: "Gemini 1.5 Pro",
+        price: "$7/million in, $21/million out",
+        speed: "High accuracy, slower",
+    },
+    {
+        id: "gemini-1.5-flash-latest",
+        label: "Gemini 1.5 Flash",
+        price: "$0.35/million in, $1.05/million out",
+        speed: "Fast, balanced",
+    },
+    {
+        id: "gemini-2.5-pro-latest",
+        label: "Gemini 2.5 Pro",
+        price: "$10/million in, $30/million out",
+        speed: "Most accurate, slower",
+    },
+    {
+        id: "gemini-2.5-flash-latest",
+        label: "Gemini 2.5 Flash",
+        price: "$0.50/million in, $1.50/million out",
+        speed: "Fast, good balance",
+    },
+    {
+        id: "gemini-2.5-flash-lite-latest",
+        label: "Gemini 2.5 Flash Lite",
+        price: "$0.10/million in, $0.30/million out",
+        speed: "Ultra fast, cheaper",
+    },
+];
 
 export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: string) => void }) {
     const {
@@ -38,11 +71,16 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
     const [newKey, setNewKey] = useState("");
     const [showAddKeyForm, setShowAddKeyForm] = useState(false);
 
+    // custom prompt support
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    type CustomPrompt = { name: string; text: string };
+    const [customPrompts, setCustomPrompts] = useState<CustomPrompt[]>([]);
+
+
     // --- Load keys on mount ---
     useEffect(() => {
         window.electron?.ipcRenderer.invoke("keys:list").then((keys: ApiKey[]) => {
             if (keys) {
-                // replace store with fresh list (avoid duplicates)
                 keys.forEach((k) => addApiKey(k));
             }
         });
@@ -73,6 +111,43 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
         }
     };
 
+    // --- Upload Custom Prompt ---
+    const handleUploadPrompt = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const text = e.target?.result as string;
+            const name = file.name.replace(/\.(txt|json)$/i, "");
+
+            // ✅ Persist to disk
+            await window.electron?.ipcRenderer.invoke("prompts:save", { name, text });
+
+            setCustomPrompts((prev) => [...prev, { name, text }]);
+            setSelectedPrompt(name);
+            setPromptText(text);
+        };
+        reader.readAsText(file);
+    };
+
+    // --- Delete Custom Prompt ---
+    const handleDeletePrompt = async (name: string) => {
+        await window.electron?.ipcRenderer.invoke("prompts:delete", name);
+        setCustomPrompts((prev) => prev.filter((p) => p.name !== name));
+        if (selectedPrompt === name) {
+            setSelectedPrompt("");
+            setPromptText("");
+        }
+    };
+
+    // --- Load prompts on mount ---
+    useEffect(() => {
+        window.electron?.ipcRenderer.invoke("prompts:list").then((prompts: { name: string; text: string }[]) => {
+            if (prompts) setCustomPrompts(prompts);
+        });
+    }, []);
+
+
     // --- Send request to Gemini ---
     const handleSendToGemini = async () => {
         const activeKey = apiKeys.find((k) => k.name === selectedApiKey)?.key;
@@ -86,7 +161,7 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
         try {
             const data = await window.electron?.ipcRenderer.invoke("gemini:run", {
                 apiKey: activeKey,
-                model: selectedModel,
+                model: selectedModel, // e.g. "gemini-2.5-flash-latest"
                 prompt: promptText,
                 transcript: transcriptSRT,
             });
@@ -95,7 +170,6 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
 
             let text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
 
-            // ✅ Strip markdown code fences if present
             text = text.replace(/```json/gi, "").replace(/```/g, "").trim();
 
             const parsed = JSON.parse(text);
@@ -108,9 +182,8 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
         }
     };
 
-    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const jsonInputRef = useRef<HTMLInputElement | null>(null);
 
-    // --- Handle JSON Upload ---
     const handleUploadJson = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
@@ -144,11 +217,7 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
                     {/* API Key Handling */}
                     {apiKeys.length === 0 || showAddKeyForm ? (
                         <div className="space-y-2">
-                            <Input
-                                placeholder="Key Name"
-                                value={newKeyName}
-                                onChange={(e) => setNewKeyName(e.target.value)}
-                            />
+                            <Input placeholder="Key Name" value={newKeyName} onChange={(e) => setNewKeyName(e.target.value)} />
                             <Input
                                 placeholder="Enter Gemini API Key"
                                 type="password"
@@ -156,99 +225,101 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
                                 onChange={(e) => setNewKey(e.target.value)}
                             />
                             <div className="flex gap-2">
-                                <Button onClick={handleAddKey} className="w-full">
-                                    Save Locally
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    onClick={() => setShowAddKeyForm(false)}
-                                >
-                                    Cancel
-                                </Button>
+                                <Button onClick={handleAddKey} className="w-full">Save Locally</Button>
+                                <Button variant="ghost" onClick={() => setShowAddKeyForm(false)}>Cancel</Button>
                             </div>
                         </div>
                     ) : (
                         <div className="flex items-center gap-2">
-                            <Select
-                                value={selectedApiKey ?? ""}
-                                onValueChange={(name) => setSelectedApiKey(name)}
-                            >
+                            <Select value={selectedApiKey ?? ""} onValueChange={(name) => setSelectedApiKey(name)}>
                                 <SelectTrigger className="w-[200px]">
                                     <SelectValue placeholder="Select API Key" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {apiKeys.map((k) => (
-                                        <SelectItem key={k.name} value={k.name}>
-                                            {k.name}
-                                        </SelectItem>
+                                        <SelectItem key={k.name} value={k.name}>{k.name}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
-
-                            <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => {
-                                    if (selectedApiKey) handleRemoveKey(selectedApiKey);
-                                }}
-                            >
-                                Delete
-                            </Button>
-
-                            <Button
-                                size="sm"
-                                onClick={() => setShowAddKeyForm(true)}
-                            >
-                                Add Key
-                            </Button>
+                            <Button variant="destructive" size="sm" onClick={() => { if (selectedApiKey) handleRemoveKey(selectedApiKey); }}>Delete</Button>
+                            <Button size="sm" onClick={() => setShowAddKeyForm(true)}>Add Key</Button>
                         </div>
                     )}
 
-                    {/* Model + Prompt Dropdowns side by side */}
-                    <div className="flex gap-2">
-                        <Select
-                            value={selectedModel ?? ""}
-                            onValueChange={(v) => setSelectedModel(v)}
-                        >
+                    {/* Model + Prompt Dropdowns */}
+                    <div className="flex flex-col gap-3">
+                        {/* Model dropdown */}
+                        <Select value={selectedModel ?? ""} onValueChange={(v) => setSelectedModel(v)}>
                             <SelectTrigger>
                                 <SelectValue placeholder="Choose a model" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="gemini-1.5-pro-latest">
-                                    Gemini 1.5 Pro
-                                </SelectItem>
-                                <SelectItem value="gemini-1.5-flash-latest">
-                                    Gemini 1.5 Flash
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-
-                        <Select
-                            value={selectedPrompt ?? ""}
-                            onValueChange={(v) => {
-                                setSelectedPrompt(v);
-                                setPromptText(PROMPT_PRESETS[v]);
-                            }}
-                        >
-                            <SelectTrigger>
-                                <SelectValue placeholder="Choose genre" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {Object.keys(PROMPT_PRESETS).map((key) => (
-                                    <SelectItem key={key} value={key}>
-                                        {key}
+                                {GEMINI_MODELS.map((m) => (
+                                    <SelectItem key={m.id} value={m.id}>
+                                        <div className="flex flex-col">
+                                            <span>{m.label}</span>
+                                            <span className="text-xs text-muted-foreground">{m.price} · {m.speed}</span>
+                                        </div>
                                     </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
+
+                        {/* Prompt dropdown */}
+                        <div className="flex gap-2 items-center">
+                            <Select
+                                value={selectedPrompt ?? ""}
+                                onValueChange={(v) => {
+                                    setSelectedPrompt(v);
+                                    const preset = PROMPT_PRESETS[v];
+                                    const custom = customPrompts.find((p) => p.name === v)?.text;
+                                    setPromptText(preset ?? custom ?? "");
+                                }}
+                            >
+                                <SelectTrigger className="flex-1">
+                                    <SelectValue placeholder="Choose genre or custom prompt" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {Object.keys(PROMPT_PRESETS).map((key) => (
+                                        <SelectItem key={key} value={key}>{key}</SelectItem>
+                                    ))}
+                                    {customPrompts.length > 0 && (
+                                        <>
+                                            <hr className="my-1" />
+                                            {customPrompts.map((cp) => (
+                                                <div key={cp.name} className="flex items-center justify-between">
+                                                    <SelectItem value={cp.name}>{cp.name} (custom)</SelectItem>
+                                                    <Button
+                                                        variant="destructive"
+                                                        className="ml-2"
+                                                        onClick={() => handleDeletePrompt(cp.name)}
+                                                    >
+                                                        ✕
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </>
+                                    )}
+
+                                </SelectContent>
+                            </Select>
+
+                            {/* Upload button for custom prompt */}
+                            <input
+                                type="file"
+                                accept=".txt,.json"
+                                ref={fileInputRef}
+                                className="hidden"
+                                onChange={handleUploadPrompt}
+                            />
+                            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                                Upload Prompt
+                            </Button>
+                        </div>
                     </div>
 
                     <ScrollArea className="h-[200px] border rounded p-2 text-sm">
-                        {promptText || (
-                            <span className="text-muted-foreground">
-                                Select a prompt type
-                            </span>
-                        )}
+                        {promptText || <span className="text-muted-foreground">Select a prompt type</span>}
                     </ScrollArea>
                 </CardContent>
             </Card>
@@ -264,31 +335,17 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
                     </ScrollArea>
 
                     <div className="flex gap-2">
-                        <Button
-                            className="flex-1"
-                            onClick={handleSendToGemini}
-                            disabled={loading || !selectedApiKey || !transcriptSRT}
-                        >
+                        <Button className="flex-1" onClick={handleSendToGemini} disabled={loading || !selectedApiKey || !transcriptSRT}>
                             {loading ? "Running..." : `Send to ${selectedModel}`}
                         </Button>
 
                         <div className="flex items-center gap-2">
-                            <input
-                                type="file"
-                                accept="application/json"
-                                ref={fileInputRef}
-                                className="hidden"
-                                onChange={handleUploadJson}
-                            />
-                            <Button
-                                variant="outline"
-                                onClick={() => fileInputRef.current?.click()}
-                            >
+                            <input type="file" accept="application/json" ref={jsonInputRef} className="hidden" onChange={handleUploadJson} />
+                            <Button variant="outline" onClick={() => jsonInputRef.current?.click()}>
                                 Upload ViralClips.json
                             </Button>
                         </div>
                     </div>
-
 
                     {clipCandidates.length > 0 && (
                         <div className="space-y-2">
@@ -298,14 +355,10 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
                             </ScrollArea>
 
                             <div className="flex gap-2">
-                                {/* ✅ Download JSON Button */}
                                 <Button
                                     variant="outline"
                                     onClick={() => {
-                                        const blob = new Blob(
-                                            [JSON.stringify(clipCandidates, null, 2)],
-                                            { type: "application/json" }
-                                        );
+                                        const blob = new Blob([JSON.stringify(clipCandidates, null, 2)], { type: "application/json" });
                                         const url = URL.createObjectURL(blob);
                                         const a = document.createElement("a");
                                         a.href = url;
@@ -317,10 +370,7 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
                                     Download JSON
                                 </Button>
 
-                                {/* ✅ Move to Edit & Subtitles Button */}
-                                <Button
-                                    onClick={() => setActiveTab("editAndSubtitles")}
-                                >
+                                <Button onClick={() => setActiveTab("editAndSubtitles")}>
                                     Move to Edit and Subtitles
                                 </Button>
                             </div>

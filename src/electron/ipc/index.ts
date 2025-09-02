@@ -9,6 +9,7 @@ import { registerFontHandlers } from "./fonts.js"
 import { registerSavedHandlers } from "./saved.js"
 import { registerPresetHandlers } from "./preset.js"
 import { registerMusicHandlers } from "./bgmusic.js"
+import { registerPromptHandlers } from "./prompts.js"
 
 /**
  * Register all IPC handlers across the app.
@@ -26,4 +27,5 @@ export function registerIpcHandlers() {
     registerSavedHandlers();
     registerPresetHandlers();
     registerMusicHandlers();
+    registerPromptHandlers();
 }
