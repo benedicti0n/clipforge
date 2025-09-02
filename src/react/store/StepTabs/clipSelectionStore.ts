@@ -5,16 +5,16 @@ interface ApiKey {
     key: string;
 }
 
-interface ClipCandidate {
-    startTime: string;
-    endTime: string;
-    transcriptionPart: string;
-    viralityScore: string;
-    totalDuration: string;
-    suitableCaption: string;
-    filePath?: string; // after trimming
+// ✅ Make metadata optional so we can support both generated + custom clips
+export interface ClipCandidate {
+    startTime?: string;
+    endTime?: string;
+    transcriptionPart?: string;
+    viralityScore?: string;
+    totalDuration?: string;
+    suitableCaption?: string;
+    filePath: string; // always required for editing/playing
 }
-
 
 interface ClipSelectionState {
     // Keys
@@ -23,9 +23,9 @@ interface ClipSelectionState {
     addApiKey: (apiKey: ApiKey) => void;
     removeApiKey: (name: string) => void;
     setSelectedApiKey: (name: string) => void;
-    setApiKeys: (keys: ApiKey[]) => void; // 🔑 new setter to overwrite safely
+    setApiKeys: (keys: ApiKey[]) => void;
 
-    // Model (Gemini model type)
+    // Model
     selectedModel: string | null;
     setSelectedModel: (model: string) => void;
 
@@ -38,14 +38,15 @@ interface ClipSelectionState {
     // Candidates
     clipCandidates: ClipCandidate[];
     setClipCandidates: (candidates: ClipCandidate[]) => void;
-    setClipFilePath: (index: number, path: string) => void
+    setClipFilePath: (index: number, path: string) => void;
+    addClipCandidate: (clip: ClipCandidate) => void;
+    addCustomClip: (filePath: string) => void; // ✅ now typed
 }
 
 export const useClipSelectionStore = create<ClipSelectionState>((set) => ({
     apiKeys: [],
     selectedApiKey: null,
 
-    // ✅ Deduplicate keys by name when adding
     addApiKey: (apiKey) =>
         set((state) => {
             const keysMap = new Map(state.apiKeys.map((k) => [k.name, k]));
@@ -56,7 +57,6 @@ export const useClipSelectionStore = create<ClipSelectionState>((set) => ({
             };
         }),
 
-    // ✅ Remove key
     removeApiKey: (name) =>
         set((state) => ({
             apiKeys: state.apiKeys.filter((k) => k.name !== name),
@@ -64,7 +64,6 @@ export const useClipSelectionStore = create<ClipSelectionState>((set) => ({
                 state.selectedApiKey === name ? null : state.selectedApiKey,
         })),
 
-    // ✅ Set keys from file (avoids duplicates when reloading tab)
     setApiKeys: (keys) =>
         set({
             apiKeys: [...new Map(keys.map((k) => [k.name, k])).values()],
@@ -91,4 +90,14 @@ export const useClipSelectionStore = create<ClipSelectionState>((set) => ({
             if (updated[index]) updated[index].filePath = path;
             return { clipCandidates: updated };
         }),
+
+    addClipCandidate: (clip) =>
+        set((state) => ({
+            clipCandidates: [...state.clipCandidates, clip],
+        })),
+
+    addCustomClip: (filePath) =>
+        set((state) => ({
+            clipCandidates: [...state.clipCandidates, { filePath }],
+        })),
 }));

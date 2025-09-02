@@ -1,18 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useUploadStore } from "../../../store/StepTabs/uploadStore";
 import { useClipSelectionStore } from "../../../store/StepTabs/clipSelectionStore";
 import { Card, CardContent } from "../../ui/card";
 import { Button } from "../../ui/button";
 import EditClipModal from "./EditClipModal";
+import { Buffer } from "buffer";
 
 export default function EditSubtitleTab() {
     const { absolutePath } = useUploadStore();
-    const { clipCandidates, setClipFilePath } = useClipSelectionStore();
+    const { clipCandidates, setClipFilePath, addCustomClip } = useClipSelectionStore();
 
     const [loading, setLoading] = useState(false);
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const [uploading, setUploading] = useState(false);
 
     const handleGenerateClips = async () => {
         if (!absolutePath || clipCandidates.length === 0) {
@@ -45,45 +48,65 @@ export default function EditSubtitleTab() {
         }
     };
 
-    // ---------- UI States ----------
-    if (!absolutePath && clipCandidates.length === 0) {
-        return (
-            <div className="text-center text-muted-foreground py-10">
-                ⚠️ Please upload a video and generate clips first.
-            </div>
-        );
-    }
+    // ✅ Handle manual clip upload
+    const handleUploadClip = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
 
-    if (absolutePath && clipCandidates.length === 0) {
-        return (
-            <div className="text-center text-muted-foreground py-10">
-                Transcript clips JSON not found or empty. Please upload or generate a
-                ViralClips.json
-            </div>
-        );
-    }
+        setUploading(true);
+        try {
+            // Convert file to serializable array
+            const arrayBuffer = await file.arrayBuffer();
+            const uint8 = new Uint8Array(arrayBuffer);
 
-    const allMissingFiles = clipCandidates.every((c) => !c.filePath);
+            const savedPath: string = await window.electron?.ipcRenderer.invoke(
+                "clip:upload",
+                {
+                    data: Array.from(uint8), // ✅ plain array
+                    name: file.name
+                }
+            );
 
-    if (absolutePath && clipCandidates.length > 0 && allMissingFiles) {
-        return (
-            <div className="text-center text-muted-foreground py-10 space-y-4">
-                <p>Transcript clips JSON found but clips not generated.</p>
-                <Button onClick={handleGenerateClips} disabled={loading}>
-                    {loading ? "Generating..." : "Generate Clips"}
-                </Button>
-            </div>
-        );
-    }
+            addCustomClip(savedPath);
+        } catch (err) {
+            console.error("Upload error:", err);
+            alert("Failed to upload clip.");
+        } finally {
+            setUploading(false);
+            e.target.value = ""; // reset input
+        }
+    };
 
-    // ---------- Show Generated Clips ----------
+
+
+    // ---------- Show Clips ----------
     return (
         <div className="space-y-4">
             <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold">Generated Clips</h2>
-                <Button onClick={handleGenerateClips} disabled={loading}>
-                    {loading ? "Generating..." : "Regenerate Clips"}
-                </Button>
+                <h2 className="text-lg font-semibold">Clips</h2>
+                <div className="flex gap-2">
+                    <Button onClick={handleGenerateClips} disabled={loading}>
+                        {loading ? "Generating..." : "Regenerate Clips"}
+                    </Button>
+                    <div>
+                        {/* Hidden input */}
+                        <input
+                            type="file"
+                            accept="video/*"
+                            hidden
+                            ref={fileInputRef}
+                            onChange={handleUploadClip}
+                        />
+
+                        {/* Real button */}
+                        <Button
+                            disabled={uploading}
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            {uploading ? "Uploading..." : "Upload Clip"}
+                        </Button>
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -102,32 +125,31 @@ export default function EditSubtitleTab() {
                         )}
 
                         <CardContent className="p-3 space-y-2 pt-0">
-                            <div className="flex flex-wrap gap-2 text-xs">
-                                <span className="px-2 py-1 bg-gray-100 rounded">
-                                    Start: {clip.startTime}
-                                </span>
-                                <span className="px-2 py-1 bg-gray-100 rounded">
-                                    End: {clip.endTime}
-                                </span>
-                                <span className="px-2 py-1 bg-gray-100 rounded">
-                                    Duration: {clip.totalDuration}
-                                </span>
-                                <span
-                                    className={`px-2 py-1 rounded ${Number(clip.viralityScore) > 7
-                                        ? "bg-green-100 text-green-700"
-                                        : "bg-yellow-100 text-yellow-700"
-                                        }`}
-                                >
-                                    Score: {clip.viralityScore}
-                                </span>
-                            </div>
+                            {/* Only show metadata if available */}
+                            {clip.startTime && clip.endTime && (
+                                <div className="flex flex-wrap gap-2 text-xs">
+                                    <span className="px-2 py-1 bg-gray-100 rounded">
+                                        Start: {clip.startTime}
+                                    </span>
+                                    <span className="px-2 py-1 bg-gray-100 rounded">
+                                        End: {clip.endTime}
+                                    </span>
+                                    <span className="px-2 py-1 bg-gray-100 rounded">
+                                        Duration: {clip.totalDuration}
+                                    </span>
+                                    <span className="px-2 py-1 rounded bg-gray-100">
+                                        Score: {clip.viralityScore}
+                                    </span>
+                                </div>
+                            )}
 
-                            <p className="text-sm italic text-muted-foreground">
-                                {clip.suitableCaption}
-                            </p>
+                            {clip.suitableCaption && (
+                                <p className="text-sm italic text-muted-foreground">
+                                    {clip.suitableCaption}
+                                </p>
+                            )}
 
                             <div className="flex gap-2">
-                                {/* ✅ Edit Button */}
                                 <Button size="sm" onClick={() => setEditingIndex(i)}>
                                     Edit
                                 </Button>

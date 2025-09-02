@@ -10,6 +10,7 @@ import { registerSavedHandlers } from "./saved.js"
 import { registerPresetHandlers } from "./preset.js"
 import { registerMusicHandlers } from "./bgmusic.js"
 import { registerPromptHandlers } from "./prompts.js"
+import { registerCustomClipIpc } from "./customClip.js"
 
 /**
  * Register all IPC handlers across the app.
@@ -28,4 +29,5 @@ export function registerIpcHandlers() {
     registerPresetHandlers();
     registerMusicHandlers();
     registerPromptHandlers();
+    registerCustomClipIpc();
 }
