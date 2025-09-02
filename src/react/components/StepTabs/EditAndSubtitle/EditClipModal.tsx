@@ -160,9 +160,10 @@ export default function EditClipModal({
                             className="w-full h-full object-contain"
                         />
 
-                        {/* Live preview overlays (not burned yet) */}
-                        {subtitles.length > 0 && (
+                        {/* Live preview subtitles */}
+                        {subtitles.map((s, idx) => (
                             <div
+                                key={idx}
                                 className="absolute pointer-events-none text-center"
                                 style={{
                                     top: `${subtitleStyle.y}%`,
@@ -186,12 +187,13 @@ export default function EditClipModal({
                                     fontWeight: subtitleStyle.bold ? "bold" : "normal",
                                     fontStyle: subtitleStyle.italic ? "italic" : "normal",
                                     textDecoration: subtitleStyle.underline ? "underline" : "none",
-
                                 }}
                             >
-                                {subtitles[0].text}
+                                {s.text}
                             </div>
-                        )}
+                        ))}
+
+                        {/* Live preview custom texts */}
                         {customTexts.map((t, i) => (
                             <div
                                 key={i}
@@ -203,7 +205,7 @@ export default function EditClipModal({
                                     fontSize: `${t.fontSize}px`,
                                     color: t.fontColor,
                                     fontFamily: t.fontFamily,
-                                    WebkitTextStroke: `${subtitleStyle.strokeWidth}px ${t.strokeColor}`,
+                                    WebkitTextStroke: `${t.strokeWidth ?? 0}px ${t.strokeColor}`,
                                     opacity: (t.opacity ?? 100) / 100,
                                     fontWeight: t.bold ? "bold" : "normal",
                                     fontStyle: t.italic ? "italic" : "normal",
@@ -212,9 +214,9 @@ export default function EditClipModal({
                             >
                                 {t.text}
                             </div>
-
                         ))}
                     </div>
+
 
                     {/* Right: Editors */}
                     <div className="flex flex-col overflow-y-auto">

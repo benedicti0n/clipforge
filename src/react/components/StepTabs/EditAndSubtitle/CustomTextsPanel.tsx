@@ -25,6 +25,7 @@ export default function CustomTextsPanel({ texts, setTexts }: CustomTextsPanelPr
                 fontSize: 24,
                 fontColor: "#ffffff",
                 strokeColor: "#000000",
+                strokeWidth: 1, // ✅ default stroke width
                 fontFamily: "Arial",
                 x: 50,
                 y: 50,
@@ -91,7 +92,19 @@ export default function CustomTextsPanel({ texts, setTexts }: CustomTextsPanelPr
                         />
                     </div>
 
-                    {/* ✅ Typography Toggles */}
+                    {/* ✅ Stroke Width */}
+                    <div className="space-y-1">
+                        <label className="text-xs">Stroke Width</label>
+                        <Slider
+                            min={0}
+                            max={10}
+                            step={1}
+                            value={[t.strokeWidth]}
+                            onValueChange={(v) => updateText(i, { strokeWidth: v[0] })}
+                        />
+                    </div>
+
+                    {/* Typography Toggles */}
                     <div className="flex gap-2">
                         <Button
                             variant={t.bold ? "default" : "outline"}
@@ -131,6 +144,7 @@ export default function CustomTextsPanel({ texts, setTexts }: CustomTextsPanelPr
                             onValueChange={(v) => updateText(i, { y: v[0] })}
                         />
                     </div>
+
                     <div className="space-y-1">
                         <label className="text-xs">Opacity</label>
                         <Slider
@@ -141,7 +155,6 @@ export default function CustomTextsPanel({ texts, setTexts }: CustomTextsPanelPr
                             onValueChange={(v) => updateText(i, { opacity: v[0] })}
                         />
                     </div>
-
                 </div>
             ))}
         </div>

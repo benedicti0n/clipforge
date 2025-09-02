@@ -10,36 +10,36 @@ export function drawCustomTexts(
 ) {
     if (!customTexts.length) return;
 
-    ctx.lineWidth = subtitleStyle.strokeWidth || 2;
-    ctx.globalAlpha = (subtitleStyle.opacity ?? 100) / 100;
-
     customTexts.forEach((t) => {
         const weight = t.bold ? "bold" : "normal";
         const style = t.italic ? "italic" : "normal";
+
         ctx.font = `${style} ${weight} ${t.fontSize}px ${t.fontFamily}`;
         ctx.fillStyle = t.fontColor;
         ctx.strokeStyle = t.strokeColor;
-
-        ctx.globalAlpha = (t.opacity ?? 100) / 100; // ✅ apply per-text opacity
+        ctx.lineWidth = t.strokeWidth ?? subtitleStyle.strokeWidth ?? 2; // ✅ per-text stroke width
+        ctx.globalAlpha = (t.opacity ?? subtitleStyle.opacity ?? 100) / 100;
 
         const x = clamp((img.width * t.x) / 100, 0, img.width);
         const y = clamp((img.height * t.y) / 100, 0, img.height);
 
-        ctx.strokeText(t.text, x, y);
+        // Stroke first, then fill for best contrast
+        if (ctx.lineWidth > 0) ctx.strokeText(t.text, x, y);
         ctx.fillText(t.text, x, y);
 
         // ✅ underline support
         if (t.underline) {
             const metrics = ctx.measureText(t.text);
-            const underlineY = y + t.fontSize / 2; // tweak offset as needed
+            const underlineY = y + t.fontSize * 0.15; // slightly below baseline
             ctx.beginPath();
-            ctx.moveTo(x - metrics.width / 2, underlineY);
-            ctx.lineTo(x + metrics.width / 2, underlineY);
-            ctx.lineWidth = Math.max(1, subtitleStyle.strokeWidth || 2);
+            ctx.moveTo(x, underlineY);
+            ctx.lineTo(x + metrics.width, underlineY);
+            ctx.lineWidth = Math.max(1, t.strokeWidth ?? 2);
             ctx.strokeStyle = t.fontColor;
             ctx.stroke();
         }
     });
 
+    // reset alpha
     ctx.globalAlpha = 1;
 }

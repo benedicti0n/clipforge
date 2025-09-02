@@ -28,13 +28,14 @@ export interface SubtitleStyle {
 export interface CustomText {
     text: string;
     fontSize: number;
-    fontColor: string;    // "#RRGGBB"
-    strokeColor: string;  // "#RRGGBB"
+    fontColor: string;
+    strokeColor: string;
+    strokeWidth: number; // ✅ NEW
     fontFamily: string;
-    x: number;            // 0..100 (%)
-    y: number;            // 0..100 (%)
-    bold?: boolean;
-    italic?: boolean;
-    underline?: boolean;
-    opacity?: number;
+    x: number; // percentage
+    y: number; // percentage
+    bold: boolean;
+    italic: boolean;
+    underline: boolean;
+    opacity: number;
 }
