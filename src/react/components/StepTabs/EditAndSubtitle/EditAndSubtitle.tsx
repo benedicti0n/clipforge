@@ -1,12 +1,9 @@
-"use client";
-
 import { useRef, useState } from "react";
 import { useUploadStore } from "../../../store/StepTabs/uploadStore";
 import { useClipSelectionStore } from "../../../store/StepTabs/clipSelectionStore";
 import { Card, CardContent } from "../../ui/card";
 import { Button } from "../../ui/button";
 import EditClipModal from "./EditClipModal";
-import { Buffer } from "buffer";
 
 export default function EditSubtitleTab() {
     const { absolutePath } = useUploadStore();
@@ -14,8 +11,9 @@ export default function EditSubtitleTab() {
 
     const [loading, setLoading] = useState(false);
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
-    const fileInputRef = useRef<HTMLInputElement | null>(null);
     const [uploading, setUploading] = useState(false);
+    const [filter, setFilter] = useState<"all" | "high" | "low" | "desc">("all"); // ✅ filter state
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     const handleGenerateClips = async () => {
         if (!absolutePath || clipCandidates.length === 0) {
@@ -55,15 +53,14 @@ export default function EditSubtitleTab() {
 
         setUploading(true);
         try {
-            // Convert file to serializable array
             const arrayBuffer = await file.arrayBuffer();
             const uint8 = new Uint8Array(arrayBuffer);
 
             const savedPath: string = await window.electron?.ipcRenderer.invoke(
                 "clip:upload",
                 {
-                    data: Array.from(uint8), // ✅ plain array
-                    name: file.name
+                    data: Array.from(uint8),
+                    name: file.name,
                 }
             );
 
@@ -73,23 +70,44 @@ export default function EditSubtitleTab() {
             alert("Failed to upload clip.");
         } finally {
             setUploading(false);
-            e.target.value = ""; // reset input
+            e.target.value = "";
         }
     };
 
+    // ✅ Apply filter/sort
+    let displayedClips = [...clipCandidates];
+    if (filter === "high") {
+        displayedClips = clipCandidates.filter((c) => Number(c.viralityScore) >= 7);
+    } else if (filter === "low") {
+        displayedClips = clipCandidates.filter((c) => Number(c.viralityScore) < 7);
+    } else if (filter === "desc") {
+        displayedClips = [...clipCandidates].sort(
+            (a, b) => Number(b.viralityScore) - Number(a.viralityScore)
+        );
+    }
 
-
-    // ---------- Show Clips ----------
+    // ---------- UI ----------
     return (
         <div className="space-y-4">
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-semibold">Clips</h2>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                    {/* ✅ Filter dropdown */}
+                    <select
+                        value={filter}
+                        onChange={(e) => setFilter(e.target.value as any)}
+                        className="border rounded px-2 py-1 text-sm"
+                    >
+                        <option value="all">All Clips</option>
+                        <option value="desc">Sort by Virality (High → Low)</option>
+                        <option value="high">High Score Only (≥ 7)</option>
+                        <option value="low">Low Score Only (&lt; 7)</option>
+                    </select>
+
                     <Button onClick={handleGenerateClips} disabled={loading}>
                         {loading ? "Generating..." : "Regenerate Clips"}
                     </Button>
                     <div>
-                        {/* Hidden input */}
                         <input
                             type="file"
                             accept="video/*"
@@ -97,12 +115,7 @@ export default function EditSubtitleTab() {
                             ref={fileInputRef}
                             onChange={handleUploadClip}
                         />
-
-                        {/* Real button */}
-                        <Button
-                            disabled={uploading}
-                            onClick={() => fileInputRef.current?.click()}
-                        >
+                        <Button disabled={uploading} onClick={() => fileInputRef.current?.click()}>
                             {uploading ? "Uploading..." : "Upload Clip"}
                         </Button>
                     </div>
@@ -110,7 +123,7 @@ export default function EditSubtitleTab() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {clipCandidates.map((clip, i) => (
+                {displayedClips.map((clip, i) => (
                     <Card key={i} className="overflow-hidden shadow-sm border p-0">
                         {clip.filePath ? (
                             <video
@@ -125,28 +138,28 @@ export default function EditSubtitleTab() {
                         )}
 
                         <CardContent className="p-3 space-y-2 pt-0">
-                            {/* Only show metadata if available */}
                             {clip.startTime && clip.endTime && (
                                 <div className="flex flex-wrap gap-2 text-xs">
-                                    <span className="px-2 py-1 bg-gray-100 rounded">
-                                        Start: {clip.startTime}
-                                    </span>
-                                    <span className="px-2 py-1 bg-gray-100 rounded">
-                                        End: {clip.endTime}
-                                    </span>
-                                    <span className="px-2 py-1 bg-gray-100 rounded">
-                                        Duration: {clip.totalDuration}
-                                    </span>
-                                    <span className="px-2 py-1 rounded bg-gray-100">
+                                    <span className="px-2 py-1 bg-gray-100 rounded">Start: {clip.startTime}</span>
+                                    <span className="px-2 py-1 bg-gray-100 rounded">End: {clip.endTime}</span>
+                                    <span className="px-2 py-1 bg-gray-100 rounded">Duration: {clip.totalDuration}</span>
+
+                                    {/* ✅ Colored score */}
+                                    <span
+                                        className={`px-2 py-1 rounded font-medium ${Number(clip.viralityScore) >= 8
+                                            ? "bg-green-100 text-green-700"
+                                            : Number(clip.viralityScore) >= 5
+                                                ? "bg-yellow-100 text-yellow-700"
+                                                : "bg-red-100 text-red-700"
+                                            }`}
+                                    >
                                         Score: {clip.viralityScore}
                                     </span>
                                 </div>
                             )}
 
                             {clip.suitableCaption && (
-                                <p className="text-sm italic text-muted-foreground">
-                                    {clip.suitableCaption}
-                                </p>
+                                <p className="text-sm italic text-muted-foreground">{clip.suitableCaption}</p>
                             )}
 
                             <div className="flex gap-2">
@@ -165,13 +178,12 @@ export default function EditSubtitleTab() {
                                     Download
                                 </Button>
                             </div>
-
                         </CardContent>
+
                     </Card>
                 ))}
             </div>
 
-            {/* ✅ Editing Modal */}
             {editingIndex !== null && clipCandidates[editingIndex]?.filePath && (
                 <EditClipModal
                     open={editingIndex !== null}
