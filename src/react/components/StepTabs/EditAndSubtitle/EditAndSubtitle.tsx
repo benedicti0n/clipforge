@@ -153,7 +153,19 @@ export default function EditSubtitleTab() {
                                 <Button size="sm" onClick={() => setEditingIndex(i)}>
                                     Edit
                                 </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                        window.electron?.ipcRenderer.invoke("clip:export", {
+                                            filePath: clip.filePath,
+                                        })
+                                    }
+                                >
+                                    Download
+                                </Button>
                             </div>
+
                         </CardContent>
                     </Card>
                 ))}

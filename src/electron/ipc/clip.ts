@@ -1,4 +1,4 @@
-import { ipcMain, IpcMainInvokeEvent } from "electron";
+import { dialog, ipcMain, IpcMainInvokeEvent } from "electron";
 import path from "path";
 import { spawn } from "child_process";
 import * as fs from "fs/promises";
@@ -190,6 +190,29 @@ export function registerClipHandlers() {
             ]);
 
             return outPath;
+        }
+    );
+
+    ipcMain.handle(
+        "clip:export",
+        async (_event, { filePath }: { filePath: string }) => {
+            try {
+                const { canceled, filePath: savePath } = await dialog.showSaveDialog({
+                    title: "Export Clip",
+                    defaultPath: "clip.mp4",
+                    filters: [{ name: "Video Files", extensions: ["mp4", "mov", "avi"] }],
+                });
+
+                if (canceled || !savePath) {
+                    return null;
+                }
+
+                await fs.copyFile(filePath, savePath);
+                return savePath;
+            } catch (err) {
+                console.error("clip:export error:", err);
+                throw new Error("Failed to export clip");
+            }
         }
     );
 }
