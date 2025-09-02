@@ -195,11 +195,14 @@ export function registerClipHandlers() {
 
     ipcMain.handle(
         "clip:export",
-        async (_event, { filePath }: { filePath: string }) => {
+        async (_event, { filePath, caption }: { filePath: string; caption?: string }) => {
             try {
+                const safeName = (caption || "clip").replace(/[<>:"/\\|?*]+/g, "").trim() || "clip";
+                const defaultFileName = `${safeName}.mp4`;
+
                 const { canceled, filePath: savePath } = await dialog.showSaveDialog({
                     title: "Export Clip",
-                    defaultPath: "clip.mp4",
+                    defaultPath: defaultFileName,
                     filters: [{ name: "Video Files", extensions: ["mp4", "mov", "avi"] }],
                 });
 
@@ -215,4 +218,5 @@ export function registerClipHandlers() {
             }
         }
     );
+
 }

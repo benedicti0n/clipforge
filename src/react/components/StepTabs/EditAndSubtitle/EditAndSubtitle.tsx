@@ -172,6 +172,7 @@ export default function EditSubtitleTab() {
                                     onClick={() =>
                                         window.electron?.ipcRenderer.invoke("clip:export", {
                                             filePath: clip.filePath,
+                                            caption: clip.suitableCaption || "clip",
                                         })
                                     }
                                 >
