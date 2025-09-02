@@ -30,12 +30,14 @@ export interface CustomText {
     fontSize: number;
     fontColor: string;
     strokeColor: string;
-    strokeWidth: number; // ✅ NEW
+    strokeWidth?: number;
     fontFamily: string;
-    x: number; // percentage
-    y: number; // percentage
-    bold: boolean;
-    italic: boolean;
-    underline: boolean;
-    opacity: number;
+    x: number; // %
+    y: number; // %
+    bold?: boolean;
+    italic?: boolean;
+    underline?: boolean;
+    opacity?: number;
+    start?: string; // "HH:MM:SS,mmm"
+    end?: string;   // "HH:MM:SS,mmm"
 }
