@@ -1,5 +1,9 @@
-import { ipcMain } from "electron";
+import { app, ipcMain } from "electron";
 import { saveFontToDisk } from "../helpers/fonts.js";
+import path from "path";
+import fs from "fs"
+
+const fontsDir = path.join(app.getPath("userData"), "fonts");
 
 export function registerFontHandlers() {
     ipcMain.handle("fonts:save", async (_e, { name, data, ext }) => {
@@ -15,5 +19,16 @@ export function registerFontHandlers() {
             console.error("[Fonts] Failed to save font", err);
             throw err;
         }
+    });
+
+    ipcMain.handle("fonts:list", async () => {
+        if (!fs.existsSync(fontsDir)) {
+            return [];
+        }
+
+        return fs.readdirSync(fontsDir).map((file) => {
+            const name = file.replace(/\.(ttf|otf)$/i, "");
+            return { name, path: path.join(fontsDir, file) };
+        });
     });
 }

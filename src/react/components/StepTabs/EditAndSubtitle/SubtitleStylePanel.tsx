@@ -4,8 +4,9 @@ import { Switch } from "../../ui/switch";  // ✅ add this
 
 import type { SubtitleStyle } from "../../../../types/subtitleTypes";
 import { loadFontToCSS } from "../../../utils/fontManager";
-import path from "path";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { Upload } from "lucide-react";
+import { Button } from "../../ui/button";
 
 interface SubtitleStylePanelProps {
     style: SubtitleStyle;
@@ -37,11 +38,28 @@ export default function SubtitleStylePanel({ style, setStyle, uploadedFonts, set
         setStyle({ ...style, fontFamily: fontName });
     };
 
-
     useEffect(() => {
-        console.log("[SubtitleStylePanel] uploadedFonts changed:", uploadedFonts);
-    }, [uploadedFonts]);
+        (async () => {
+            const savedFonts: { name: string; path: string }[] =
+                await window.electron?.ipcRenderer.invoke("fonts:list");
 
+            if (savedFonts.length > 0) {
+                // Inject each font into CSS for preview
+                savedFonts.forEach((f) => {
+                    loadFontToCSS(f.name, f.path);
+                });
+
+                setUploadedFonts(savedFonts);
+            }
+        })();
+    }, [setUploadedFonts]);
+
+
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    const triggerFileSelect = () => {
+        fileInputRef.current?.click();
+    };
 
     return (
         <div className="space-y-3">
@@ -88,35 +106,49 @@ export default function SubtitleStylePanel({ style, setStyle, uploadedFonts, set
             {/* Font Family */}
             <div className="space-y-2">
                 <label className="text-sm">Font Family</label>
-                <select
-                    className="border rounded p-1 w-full"
-                    value={style.fontFamily}
-                    onChange={(e) => setStyle({ ...style, fontFamily: e.target.value })}
-                >
-                    <option value="Arial">Arial</option>
-                    <option value="Helvetica">Helvetica</option>
-                    <option value="Times New Roman">Times New Roman</option>
-                    <option value="Courier New">Courier New</option>
-                    <option value="Verdana">Verdana</option>
+                <div className="flex gap-2">
+                    <select
+                        className="border rounded p-1 flex-1"
+                        value={style.fontFamily}
+                        onChange={(e) => setStyle({ ...style, fontFamily: e.target.value })}
+                    >
+                        <option value="Arial">Arial</option>
+                        <option value="Helvetica">Helvetica</option>
+                        <option value="Times New Roman">Times New Roman</option>
+                        <option value="Courier New">Courier New</option>
+                        <option value="Verdana">Verdana</option>
 
-                    {/* Uploaded fonts */}
-                    {uploadedFonts.map((f) => (
-                        <option key={f.name} value={f.name}>
-                            {f.name}
-                        </option>
-                    ))}
-                </select>
+                        {/* Uploaded fonts */}
+                        {uploadedFonts.map((f) => (
+                            <option key={f.name} value={f.name}>
+                                {f.name}
+                            </option>
+                        ))}
+                    </select>
+
+                    {/* Hidden native input */}
+                    <input
+                        type="file"
+                        accept=".ttf,.otf"
+                        ref={fileInputRef}
+                        onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleFontUpload(file);
+                        }}
+                        hidden
+                    />
+
+                    {/* Button beside dropdown */}
+                    <Button
+                        onClick={triggerFileSelect}
+                        variant="outline"
+                        className="flex items-center gap-1 whitespace-nowrap"
+                    >
+                        <Upload className="w-4 h-4" />
+                        Upload
+                    </Button>
+                </div>
             </div>
-
-            {/* Upload */}
-            <input
-                type="file"
-                accept=".ttf,.otf"
-                onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleFontUpload(file);
-                }}
-            />
 
             {/* Text Style Controls */}
             <div className="flex gap-2">

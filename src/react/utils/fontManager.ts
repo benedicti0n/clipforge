@@ -1,8 +1,16 @@
-export function loadFontToCSS(name: string, file: File) {
-    const url = URL.createObjectURL(file);
+export function loadFontToCSS(fontName: string, source: File | string) {
+    let fontUrl: string;
 
-    const fontFace = new FontFace(name, `url(${url})`);
-    document.fonts.add(fontFace);
+    if (typeof source === "string") {
+        // file path from disk
+        fontUrl = `file://${source}`;
+    } else {
+        // browser File
+        fontUrl = URL.createObjectURL(source);
+    }
 
-    return url; // useful if you want to revoke later
+    const fontFace = new FontFace(fontName, `url(${fontUrl})`);
+    fontFace.load().then((loaded) => {
+        (document as any).fonts.add(loaded);
+    });
 }
