@@ -1,4 +1,3 @@
-import { clamp } from "../../helpers/skia.js";
 import type { CustomText, SubtitleStyle } from "../../../types/subtitleTypes";
 import { CanvasRenderingContext2D } from "skia-canvas";
 
@@ -6,40 +5,49 @@ export function drawCustomTexts(
     ctx: CanvasRenderingContext2D,
     img: { width: number; height: number },
     customTexts: CustomText[],
-    subtitleStyle: SubtitleStyle
+    _subtitleStyle: SubtitleStyle,
+    timeSec: number
 ) {
-    if (!customTexts.length) return;
+    const toSeconds = (t?: string) => {
+        if (!t) return undefined;
+        const [h, m, sMs] = t.split(":");
+        const [s, ms] = sMs.split(",");
+        return (+h) * 3600 + (+m) * 60 + (+s) + (+ms) / 1000;
+    };
 
-    customTexts.forEach((t) => {
+    for (const t of customTexts) {
+        const start = toSeconds(t.start) ?? 0;
+        const end = toSeconds(t.end) ?? Infinity;
+        if (timeSec < start || timeSec > end) continue;
+
         const weight = t.bold ? "bold" : "normal";
         const style = t.italic ? "italic" : "normal";
-
         ctx.font = `${style} ${weight} ${t.fontSize}px ${t.fontFamily}`;
-        ctx.fillStyle = t.fontColor;
-        ctx.strokeStyle = t.strokeColor;
-        ctx.lineWidth = t.strokeWidth ?? subtitleStyle.strokeWidth ?? 2; // ✅ per-text stroke width
-        ctx.globalAlpha = (t.opacity ?? subtitleStyle.opacity ?? 100) / 100;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.globalAlpha = (t.opacity ?? 100) / 100;
 
-        const x = clamp((img.width * t.x) / 100, 0, img.width);
-        const y = clamp((img.height * t.y) / 100, 0, img.height);
+        const px = (img.width * t.x) / 100;
+        const py = (img.height * t.y) / 100;
 
-        // Stroke first, then fill for best contrast
-        if (ctx.lineWidth > 0) ctx.strokeText(t.text, x, y);
-        ctx.fillText(t.text, x, y);
+        if ((t.strokeWidth ?? 0) > 0) {
+            ctx.lineWidth = t.strokeWidth ?? 0;
+            ctx.strokeStyle = t.strokeColor ?? "#000";
+            ctx.strokeText(t.text, px, py);
+        }
+        ctx.fillStyle = t.fontColor ?? "#fff";
+        ctx.fillText(t.text, px, py);
 
-        // ✅ underline support
         if (t.underline) {
             const metrics = ctx.measureText(t.text);
-            const underlineY = y + t.fontSize * 0.15; // slightly below baseline
+            const uy = py + t.fontSize * 0.15;
             ctx.beginPath();
-            ctx.moveTo(x, underlineY);
-            ctx.lineTo(x + metrics.width, underlineY);
-            ctx.lineWidth = Math.max(1, t.strokeWidth ?? 2);
-            ctx.strokeStyle = t.fontColor;
+            ctx.moveTo(px - metrics.width / 2, uy);
+            ctx.lineTo(px + metrics.width / 2, uy);
+            ctx.lineWidth = Math.max(1, t.strokeWidth ?? 1);
+            ctx.strokeStyle = t.fontColor ?? "#fff";
             ctx.stroke();
         }
-    });
-
-    // reset alpha
-    ctx.globalAlpha = 1;
-}
+        ctx.globalAlpha = 1;
+    }
+}  

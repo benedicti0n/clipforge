@@ -6,6 +6,11 @@ import { Canvas, FontLibrary } from "skia-canvas";
 import { ensureClipsDir } from "../../helpers/clip.js";
 import { runFFmpeg } from "../../helpers/ffmpeg.js";
 
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
+
 import type {
     SubtitleEntry,
     SubtitleStyle,
@@ -32,6 +37,7 @@ export function registerSkiaHandlers() {
             subtitleStyle,
             customTexts,
             index,
+            fps = 30,  // Default FPS if not provided
             fonts = [],
             bgMusic,
             videoDimensions,
@@ -54,96 +60,131 @@ export function registerSkiaHandlers() {
         const vidW = Math.max(2, Math.floor(videoDimensions?.width ?? 1920));
         const vidH = Math.max(2, Math.floor(videoDimensions?.height ?? 1080));
 
+        // === GET VIDEO DURATION ===
+        let durationSec = 10; // fallback
+        try {
+            durationSec = await getVideoDuration(filePath);
+        } catch (error) {
+            console.warn("Could not get video duration, using fallback:", error);
+        }
+
         try {
             // 1) Generate ASS subtitles (PlayRes = video size for best fidelity)
             const ass = generateASS(subtitles, subtitleStyle, vidW, vidH);
             await fs.writeFile(assPath, ass, "utf-8");
 
-            // 2) Build a single full-frame transparent PNG for all custom texts
-            //    (This makes positioning and scaling exact; overlay at 0:0)
-            if (customTexts.length > 0) {
-                // Register custom fonts for Skia so overlays use the same faces
-                safeRegisterFontsForSkia(fonts);
-                await renderCustomTextsOverlayPNG(customTexts, { width: vidW, height: vidH }, overlayPng);
-            } else {
-                // ensure no stale file
-                try { await fs.rm(overlayPng, { force: true }); } catch { }
-            }
-
-            // 3) Compose ffmpeg filter_complex:
-            //    video: 0:v -> subtitles -> (optional overlay) -> [vout]
-            //    audio: original + bgMusic (if any) -> [aout]
-            const inputs: string[] = ["-i", filePath];
-            let nextInputIndex = 1;
+            // 2) Overlays
+            safeRegisterFontsForSkia(fonts);
 
             const hasOverlay = customTexts.length > 0;
-            if (hasOverlay) {
-                const overlayDir = path.join(outDir, `overlay-${index}`);
-                await renderCustomTextsOverlaySeq(customTexts, { width: vidW, height: vidH }, fps, durationSec, overlayDir, web);
+            const hasTimedTexts = hasOverlay && customTexts.some(t => t.start || t.end);
 
-                inputs.push(
-                    "-framerate", fps.toString(),
-                    "-i", path.join(overlayDir, "overlay-%05d.png")
-                );
-                nextInputIndex++;
+            const inputs: string[] = ["-i", filePath];
+            let nextInputIndex = 1;
+            let overlayIndex: number | undefined;
+
+            if (hasOverlay) {
+                if (hasTimedTexts) {
+                    // PNG SEQUENCE when timing is used
+                    const overlayDir = path.join(outDir, `overlay-${index}`);
+                    await renderCustomTextsOverlaySeq(
+                        customTexts,
+                        { width: vidW, height: vidH },
+                        fps,
+                        durationSec,
+                        overlayDir,
+                        web?.webContents
+                    );
+
+                    inputs.push(
+                        "-framerate", fps.toString(),
+                        "-i", path.join(overlayDir, "overlay-%05d.png")
+                    );
+                    overlayIndex = nextInputIndex;
+                    nextInputIndex++;
+                } else {
+                    // STATIC overlay (fast path)
+                    const overlayStaticPng = path.join(outDir, `${parsed.name}-${index}-overlay-static.png`);
+                    await renderStaticCustomOverlayPNG(customTexts, { width: vidW, height: vidH }, overlayStaticPng);
+
+                    // loop the image for full duration
+                    inputs.push(
+                        "-loop", "1",
+                        "-t", String(durationSec),
+                        "-i", overlayStaticPng
+                    );
+                    overlayIndex = nextInputIndex;
+                    nextInputIndex++;
+                }
             }
 
             const hasBg = Boolean(bgMusic?.path);
             if (hasBg) {
-                inputs.push("-i", bgMusic!.path);
+                inputs.push("-i", bgMusic!.path!);
                 nextInputIndex++;
             }
-
 
             const vGraph = buildVideoGraph({
                 assPath,
                 fontsDir,
                 hasOverlay,
-                overlayIndex: hasOverlay ? 1 : undefined, // overlay PNG is input #1 if present
+                overlayIndex,
             });
 
             const aGraph = buildAudioGraph({
                 hasBg,
-                bgIndex: hasBg ? (hasOverlay ? 2 : 1) : undefined, // bg index depends on overlay presence
+                bgIndex: hasBg ? (hasOverlay ? 2 : 1) : undefined,
                 bgVolume: bgMusic?.volume ?? 50,
             });
 
             const ffArgs = [
                 "-y",
                 ...inputs,
-                "-filter_complex",
-                `${vGraph};${aGraph}`,
-                "-map",
-                "[vout]",
-                "-map",
-                "[aout]",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "fast",
-                "-crf",
-                "23",
-                "-c:a",
-                "aac",
+                "-filter_complex", `${vGraph};${aGraph}`,
+                "-map", "[vout]",
+                "-map", "[aout]",
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-crf", "23",
+                "-c:a", "aac",
                 "-shortest",
                 outPath,
             ];
-
-            // Optional: you can emit simple staged progress here if you want
-            // web?.webContents.send("skia:progress", { frame: 0, total: 100, percent: 10 });
 
             await runFFmpeg(ffArgs);
 
             web?.webContents.send("skia:done", { outPath });
             return outPath;
         } finally {
-            // cleanup temp files best-effort
             try { await fs.rm(assPath, { force: true }); } catch { }
-            try { await fs.rm(overlayPng, { force: true }); } catch { }
+            // Clean static overlay if created
+            try {
+                const staticPng = path.join(outDir, `${parsed.name}-${index}-overlay-static.png`);
+                await fs.rm(staticPng, { force: true });
+            } catch { }
+
+            // Clean seq
+            if (customTexts.length > 0) {
+                try {
+                    const overlayDir = path.join(outDir, `overlay-${index}`);
+                    await fs.rm(overlayDir, { recursive: true, force: true });
+                } catch { }
+            }
         }
     });
 }
 
+// Helper function to get video duration using ffprobe
+async function getVideoDuration(filePath: string): Promise<number> {
+    try {
+        const { stdout } = await execAsync(`ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${filePath}"`);
+        const duration = parseFloat(stdout.trim());
+        return duration > 0 ? duration : 10; // fallback to 10 seconds if invalid
+    } catch (error) {
+        console.error("Failed to get video duration:", error);
+        return 10; // fallback duration
+    }
+}
 /* ----------------------------- Helpers ----------------------------- */
 
 /** Build the video filter graph:
@@ -163,10 +204,15 @@ function buildVideoGraph(opts: {
 
     const subs = `[0:v]subtitles=filename='${assPosix}':fontsdir='${fontsPosix}'[vsub]`;
 
-    if (!hasOverlay) return `${subs};[vsub]copy[vout]`;
+    if (!hasOverlay) {
+        // pass-through but make encoder-safe
+        return `${subs};[vsub]scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p[vout]`;
+    }
 
-    return `${subs};[vsub][${overlayIndex}:v]overlay=0:0:format=auto[vout]`;
+    // overlay + make encoder-safe
+    return `${subs};[vsub][${overlayIndex}:v]overlay=0:0:format=auto,scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p[vout]`;
 }
+
 
 /** Build the audio graph:
  *  if bg:
@@ -279,6 +325,8 @@ async function renderCustomTextsOverlaySeq(
         const tSec = i / fps;
         const canvas = new Canvas(size.width, size.height);
         const ctx = canvas.getContext("2d");
+
+        // Start with transparent background
         ctx.clearRect(0, 0, size.width, size.height);
 
         for (const t of timedTexts) {
@@ -294,15 +342,18 @@ async function renderCustomTextsOverlaySeq(
             const px = (size.width * t.x) / 100;
             const py = (size.height * t.y) / 100;
 
+            // Draw stroke first if enabled
             if ((t.strokeWidth ?? 0) > 0) {
                 ctx.lineWidth = t.strokeWidth ?? 0;
                 ctx.strokeStyle = t.strokeColor ?? "#000";
                 ctx.strokeText(t.text, px, py);
             }
 
+            // Draw fill text
             ctx.fillStyle = t.fontColor ?? "#fff";
             ctx.fillText(t.text, px, py);
 
+            // Draw underline if enabled
             if (t.underline) {
                 const metrics = ctx.measureText(t.text);
                 const uy = py + t.fontSize * 0.15;
@@ -330,7 +381,6 @@ async function renderCustomTextsOverlaySeq(
     }
 }
 
-
 /** Register fonts for skia-canvas (overlay PNG rendering only). */
 function safeRegisterFontsForSkia(fonts: { name: string; path: string }[]) {
     if (!fonts?.length) return;
@@ -353,4 +403,50 @@ function escapeAssText(s: string) {
 /** Convert file path to single-quoted POSIX-ish for ffmpeg filters. */
 function toPosix(p: string) {
     return p.replace(/\\/g, "/").replace(/'/g, "\\'");
+}
+
+async function renderStaticCustomOverlayPNG(
+    texts: CustomText[],
+    size: { width: number; height: number },
+    outPng: string
+) {
+    const canvas = new Canvas(size.width, size.height);
+    const ctx = canvas.getContext("2d");
+
+    ctx.clearRect(0, 0, size.width, size.height);
+
+    for (const t of texts) {
+        const weight = t.bold ? "bold" : "normal";
+        const style = t.italic ? "italic" : "normal";
+        ctx.font = `${style} ${weight} ${t.fontSize}px ${t.fontFamily}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.globalAlpha = (t.opacity ?? 100) / 100;
+
+        const px = (size.width * t.x) / 100;
+        const py = (size.height * t.y) / 100;
+
+        if ((t.strokeWidth ?? 0) > 0) {
+            ctx.lineWidth = t.strokeWidth ?? 0;
+            ctx.strokeStyle = t.strokeColor ?? "#000";
+            ctx.strokeText(t.text, px, py);
+        }
+
+        ctx.fillStyle = t.fontColor ?? "#fff";
+        ctx.fillText(t.text, px, py);
+
+        if (t.underline) {
+            const metrics = ctx.measureText(t.text);
+            const uy = py + t.fontSize * 0.15;
+            ctx.beginPath();
+            ctx.moveTo(px - metrics.width / 2, uy);
+            ctx.lineTo(px + metrics.width / 2, uy);
+            ctx.lineWidth = Math.max(1, t.strokeWidth ?? 1);
+            ctx.strokeStyle = t.fontColor ?? "#fff";
+            ctx.stroke();
+        }
+    }
+
+    const buf = await canvas.png;
+    await fs.writeFile(outPng, buf);
 }

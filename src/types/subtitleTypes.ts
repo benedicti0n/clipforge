@@ -27,17 +27,17 @@ export interface SubtitleStyle {
 
 export interface CustomText {
     text: string;
+    x: number; // percentage
+    y: number; // percentage
     fontSize: number;
     fontColor: string;
-    strokeColor: string;
-    strokeWidth?: number;
     fontFamily: string;
-    x: number; // %
-    y: number; // %
     bold?: boolean;
     italic?: boolean;
     underline?: boolean;
+    strokeColor?: string;
+    strokeWidth?: number;
     opacity?: number;
-    start?: string; // "HH:MM:SS,mmm"
-    end?: string;   // "HH:MM:SS,mmm"
+    start?: string; // "HH:MM:SS,mmm" format
+    end?: string;   // "HH:MM:SS,mmm" format
 }

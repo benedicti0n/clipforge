@@ -99,7 +99,7 @@ export default function CustomTextsPanel({ texts, setTexts }: CustomTextsPanelPr
                             min={0}
                             max={10}
                             step={1}
-                            value={[t.strokeWidth]}
+                            value={[t.strokeWidth ?? 0]}
                             onValueChange={(v) => updateText(i, { strokeWidth: v[0] })}
                         />
                     </div>

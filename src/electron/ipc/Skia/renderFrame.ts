@@ -24,7 +24,7 @@ export async function renderFrame(
     drawSubtitles(ctx, img, subtitles, subtitleStyle, timeSec);
 
     // custom overlays
-    drawCustomTexts(ctx, img, customTexts, subtitleStyle);
+    drawCustomTexts(ctx, img, customTexts, subtitleStyle, timeSec);
 
     return canvas.png;
 }
