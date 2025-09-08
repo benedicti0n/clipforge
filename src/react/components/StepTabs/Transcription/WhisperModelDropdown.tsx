@@ -1,136 +1,165 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CheckCircle2, CircleAlert, ChevronDown } from "lucide-react";
-import { useTranscriptionStore, WHISPER_MODELS, type WhisperModel } from "../../../store/StepTabs/transcriptionStore";
+import { useEffect } from "react";
+import {
+    useTranscriptionStore,
+    WHISPER_MODELS,
+    type WhisperModel,
+} from "../../../store/StepTabs/transcriptionStore";
 import { Button } from "../../ui/button";
 import { Progress } from "../../ui/progress";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuTrigger,
+} from "../../ui/dropdown-menu";
+import { CheckCircle2, XCircle } from "lucide-react";
 import { Badge } from "../../ui/badge";
 
-function bytesMB(n: number) {
-    return `${n.toLocaleString()} MB`;
+type IPC = {
+    invoke: (channel: string, ...args: any[]) => Promise<any>;
+    on?: (channel: string, listener: (...args: any[]) => void) => void;
+    removeAllListeners?: (channel: string) => void;
+};
+
+declare global {
+    interface Window {
+        electron?: { ipcRenderer: IPC };
+    }
 }
 
 export default function WhisperModelDropdown() {
     const {
         selectedModel,
         setSelectedModel,
-        cache,
-        downloadProgress,
-        isDownloading,
-        setIsDownloading,
         setCacheFor,
         setDownloadProgress,
+        setDownloading,
+        getProgressForModel,
+        isDownloadingModel,
+        isModelCached,
     } = useTranscriptionStore();
 
-    const [open, setOpen] = useState(false);
+    const ipc = window.electron?.ipcRenderer;
 
-    const handleDownload = async (model: WhisperModel) => {
-        setIsDownloading(true);
-        setDownloadProgress(model, 0);
+    // listen for progress events
+    useEffect(() => {
+        const handler = (
+            _: unknown,
+            { model, percent }: { model: WhisperModel; percent: number }
+        ) => {
+            setDownloadProgress(model, percent);
+        };
 
+        ipc?.on?.("whisper:download:progress", handler);
+        return () => ipc?.removeAllListeners?.("whisper:download:progress");
+    }, [ipc, setDownloadProgress]);
+
+    const handleDownload = async (modelKey: WhisperModel) => {
+        setDownloading(modelKey, true);
+        setDownloadProgress(modelKey, 0);
         try {
-            // listen for progress events from main
-            window.electron?.ipcRenderer.on?.(
-                "whisper:download:progress",
-                (payload: { model: WhisperModel; percent: number }) => {
-                    if (payload.model === model) {
-                        setDownloadProgress(model, Math.max(0, Math.min(100, payload.percent)));
-                    }
-                }
-            );
-
-            await window.electron?.ipcRenderer.invoke("whisper:downloadModel", model);
-            setCacheFor(model, true);
-            setDownloadProgress(model, 100);
-        } catch (err) {
-            console.error("Download error:", err);
-            setDownloadProgress(model, 0);
-            alert("Failed to download model. Check your internet and try again.");
+            await ipc?.invoke("whisper:downloadModel", modelKey);
+            setCacheFor(modelKey, true);
+            setDownloadProgress(modelKey, 100);
+        } catch (e) {
+            console.error(e);
+            alert("Download failed");
         } finally {
-            setIsDownloading(false);
-            window.electron?.ipcRenderer.removeAllListeners?.("whisper:download:progress");
+            setDownloading(modelKey, false);
         }
     };
 
-
-    const selectedMeta = WHISPER_MODELS.find((m) => m.key === selectedModel);
-
-    useEffect(() => {
-        const checkCache = async () => {
-            for (const m of WHISPER_MODELS) {
-                const cached = await window.electron?.ipcRenderer.invoke("whisper:checkCache", m.key);
-                setCacheFor(m.key, !!cached);
+    const handleDelete = async (modelKey: WhisperModel) => {
+        const confirmed = confirm(`Delete model "${modelKey}" ?`);
+        if (!confirmed) return;
+        try {
+            const resp = await ipc?.invoke("whisper:deleteModel", modelKey);
+            if (resp?.success) {
+                setCacheFor(modelKey, false);
+                alert(`Deleted model "${modelKey}"`);
+            } else {
+                alert(resp?.message || "Failed to delete model");
             }
-        };
-        checkCache();
-    }, [setCacheFor]);
+        } catch (e) {
+            console.error(e);
+            alert("Error deleting model");
+        }
+    };
 
     return (
-        <div className="relative">
-            {/* Trigger Button */}
-            <Button
-                variant="outline"
-                className="w-full flex justify-between items-center"
-                onClick={() => setOpen(!open)}
-            >
-                {selectedMeta ? (
-                    <span>{selectedMeta.label} • {bytesMB(selectedMeta.sizeMB)}</span>
-                ) : (
-                    <span>Select a model</span>
-                )}
-                <ChevronDown className={`ml-2 h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
-            </Button>
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-full justify-between">
+                    {selectedModel ? `Selected: ${selectedModel}` : "Select Whisper Model"}
+                </Button>
+            </DropdownMenuTrigger>
 
-            {/* Dropdown Content */}
-            {open && (
-                <div className="absolute mt-2 w-full rounded-xl border bg-popover shadow-lg z-10 max-h-[300px] overflow-y-auto">
-                    {WHISPER_MODELS.map((m) => {
-                        const isCached = !!cache[m.key];
-                        const progress = downloadProgress[m.key] ?? 0;
+            <DropdownMenuContent className="w-[400px] max-h-[400px] overflow-y-auto p-2 space-y-2">
+                {WHISPER_MODELS.map((m) => {
+                    const isCached = isModelCached(m.key);
+                    const isDownloading = isDownloadingModel(m.key);
+                    const progress = getProgressForModel(m.key);
+                    const isSelected = selectedModel === m.key;
 
-                        return (
-                            <div
-                                key={m.key}
-                                className="flex items-start justify-between rounded-lg border-b p-3 cursor-pointer hover:bg-accent transition-colors"
-                                onClick={() => {
-                                    setSelectedModel(m.key as WhisperModel);
-                                    setOpen(false);
-                                }}
-                            >
-                                {/* LEFT */}
-                                <div className="flex flex-col">
-                                    <span className="font-medium">{m.label}</span>
-                                    <span className="text-xs text-muted-foreground">{m.note} • {bytesMB(m.sizeMB)}</span>
-                                    {!isCached && progress > 0 && progress < 100 && (
+                    return (
+                        <div
+                            key={m.key}
+                            className={`rounded-md border p-3 cursor-pointer ${isSelected ? "bg-muted" : "hover:bg-accent"
+                                }`}
+                            onClick={() => setSelectedModel(m.key)}
+                        >
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <div className="font-medium">{m.label}</div>
+                                    <div className="text-xs text-muted-foreground">
+                                        {m.note} · {m.sizeMB} MB
+                                    </div>
+
+                                    <div className="text-xs flex items-center gap-2">
+                                        Status:
+                                        {isCached ? (
+                                            <Badge variant="success" className="flex items-center gap-1">
+                                                <CheckCircle2 className="h-3 w-3" />
+                                                Cached
+                                            </Badge>
+                                        ) : (
+                                            <Badge
+                                                variant="destructive"
+                                                className="flex items-center gap-1"
+                                            >
+                                                <XCircle className="h-3 w-3" />
+                                                Not Cached
+                                            </Badge>
+                                        )}
+                                    </div>
+
+                                    {isDownloading && progress !== null && progress < 100 && (
                                         <div className="mt-2">
-                                            <Progress value={progress} />
-                                            <div className="text-xs mt-1">{Math.floor(progress)}%</div>
+                                            <Progress value={progress} className="w-40" />
+                                            <span className="text-xs">{progress}%</span>
                                         </div>
                                     )}
                                 </div>
 
-                                {/* RIGHT */}
-                                <div className="flex flex-col items-end gap-2">
-                                    <Badge variant={isCached ? "default" : "secondary"}>
-                                        {isCached ? (
-                                            <span className="inline-flex items-center gap-1">
-                                                <CheckCircle2 className="h-4 w-4" /> Cached
-                                            </span>
-                                        ) : (
-                                            <span className="inline-flex items-center gap-1">
-                                                <CircleAlert className="h-4 w-4" /> Not cached
-                                            </span>
-                                        )}
-                                    </Badge>
-
-                                    {!isCached && (
+                                <div className="flex gap-2">
+                                    {isCached ? (
                                         <Button
                                             size="sm"
-                                            variant="outline"
+                                            variant="destructive"
                                             onClick={(e) => {
-                                                e.stopPropagation(); // prevent closing dropdown when clicking Download
-                                                handleDownload(m.key as WhisperModel);
+                                                e.stopPropagation();
+                                                handleDelete(m.key);
+                                            }}
+                                        >
+                                            Delete
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            size="sm"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDownload(m.key);
                                             }}
                                             disabled={isDownloading}
                                         >
@@ -139,10 +168,10 @@ export default function WhisperModelDropdown() {
                                     )}
                                 </div>
                             </div>
-                        );
-                    })}
-                </div>
-            )}
-        </div>
+                        </div>
+                    );
+                })}
+            </DropdownMenuContent>
+        </DropdownMenu>
     );
 }

@@ -1,5 +1,6 @@
-import { ipcMain, BrowserWindow, IpcMainInvokeEvent } from "electron";
+import { ipcMain, IpcMainInvokeEvent } from "electron";
 import path from "path";
+import fs from "fs/promises";
 import { ensureDir, fileExists, readText, downloadWithProgress } from "../util.js";
 import { WHISPER_MODEL_FILES, WhisperModelKey } from "../constants/whisper.js";
 import { modelsDir, transcriptsDir } from "../helpers/paths.js";
@@ -17,7 +18,7 @@ export function registerWhisperHandlers() {
         return fileExists(p);
     });
 
-    ipcMain.handle("whisper:downloadModel", async (_e, modelKey: WhisperModelKey) => {
+    ipcMain.handle("whisper:downloadModel", async (e, modelKey: WhisperModelKey) => {
         const entry = WHISPER_MODEL_FILES[modelKey];
         if (!entry) throw new Error(`Unknown model: ${modelKey}`);
 
@@ -25,17 +26,23 @@ export function registerWhisperHandlers() {
 
         // Local copy
         const localPath = path.join(process.cwd(), "public", "models", entry.filename);
-        const fs = await import("fs");
-        if (fs.existsSync(localPath)) {
-            fs.copyFileSync(localPath, dest);
+        const fsSync = await import("fs");
+        if (fsSync.existsSync(localPath)) {
+            fsSync.copyFileSync(localPath, dest);
             return true;
         }
 
         // Remote download
         if (entry.url.startsWith("http")) {
-            const web = BrowserWindow.fromWebContents(_e.sender);
             await downloadWithProgress(entry.url, dest, (percent) => {
-                web?.webContents.send("whisper:download:progress", { model: modelKey, percent });
+                try {
+                    e.sender.send("whisper:download:progress", {
+                        model: modelKey,
+                        percent,
+                    });
+                } catch (err) {
+                    console.error("Failed to send progress to renderer", err);
+                }
             });
             return true;
         }
@@ -60,4 +67,32 @@ export function registerWhisperHandlers() {
 
         return { transcriptPath: out.srt, preview, full, srt };
     });
+
+    ipcMain.handle("whisper:deleteModel", async (_e, modelKey: WhisperModelKey) => {
+        const entry = WHISPER_MODEL_FILES[modelKey];
+        if (!entry) throw new Error(`Unknown model: ${modelKey}`);
+
+        const modelPath = path.join(modelsDir(), entry.filename);
+
+        try {
+            await fs.unlink(modelPath);
+            return { success: true };
+        } catch (err: any) {
+            if (err.code === "ENOENT") {
+                return { success: false, message: "Model file not found" };
+            }
+            throw err;
+        }
+    });
+
+    ipcMain.handle("whisper:listCache", async () => {
+        const result: Record<string, boolean> = {};
+        for (const key of Object.keys(WHISPER_MODEL_FILES) as WhisperModelKey[]) {
+            const entry = WHISPER_MODEL_FILES[key];
+            const p = path.join(modelsDir(), entry.filename);
+            result[key] = await fileExists(p);
+        }
+        return result;
+    });
+
 }

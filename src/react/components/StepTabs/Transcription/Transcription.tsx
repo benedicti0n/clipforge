@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useUploadStore } from "../../../store/StepTabs/uploadStore";
-import { useTranscriptionStore, WHISPER_MODELS } from "../../../store/StepTabs/transcriptionStore";
+import { useTranscriptionStore } from "../../../store/StepTabs/transcriptionStore";
 import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
 import { Separator } from "../../ui/separator";
 import { Button } from "../../ui/button";
 import { PlayCircle } from "lucide-react";
 import { ScrollArea } from "../../ui/scroll-area";
+import { Progress } from "../../ui/progress";
 import WhisperModelDropdown from "./WhisperModelDropdown";
 
 type IPC = {
@@ -22,12 +23,16 @@ declare global {
     }
 }
 
-export default function TranscriptionTab({ setActiveTab }: { setActiveTab: (tab: string) => void }) {
+export default function TranscriptionTab({
+    setActiveTab,
+}: {
+    setActiveTab: (tab: string) => void;
+}) {
     const {
         selectedModel,
-        cache,
-        setCacheFor,
-        isDownloading,
+        isModelCached,
+        isDownloadingModel,
+        getProgressForModel,
         isTranscribing,
         setIsTranscribing,
         transcriptPath,
@@ -41,40 +46,16 @@ export default function TranscriptionTab({ setActiveTab }: { setActiveTab: (tab:
     } = useTranscriptionStore();
 
     const ipc = window.electron?.ipcRenderer;
-
-    // On mount: check cache status for all models
-    useEffect(() => {
-        let mounted = true;
-
-        (async () => {
-            for (const m of WHISPER_MODELS) {
-                try {
-                    const cached =
-                        (await ipc?.invoke?.("whisper:checkCache", m.key)) ?? false;
-                    if (!mounted) return;
-                    setCacheFor(m.key, !!cached);
-                } catch {
-                    // Dev fallback: mark tiny/base cached to let you play with UI without Electron wired
-                    if (!mounted) return;
-                    setCacheFor(m.key, m.key === "tiny" || m.key === "base");
-                }
-            }
-        })();
-
-        return () => {
-            mounted = false;
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
     const { absolutePath } = useUploadStore();
 
+    // ✅ canStart now uses selectors
     const canStart = useMemo(() => {
         if (!absolutePath) return false;
         if (!selectedModel) return false;
-        if (!cache[selectedModel]) return false;
+        if (!isModelCached(selectedModel)) return false;
+        if (isDownloadingModel(selectedModel)) return false;
         return true;
-    }, [absolutePath, selectedModel, cache]);
+    }, [absolutePath, selectedModel, isModelCached, isDownloadingModel]);
 
     const handleStartTranscription = async () => {
         if (!absolutePath || !selectedModel) return;
@@ -83,9 +64,9 @@ export default function TranscriptionTab({ setActiveTab }: { setActiveTab: (tab:
         resetResults();
 
         try {
-            const resp = await window.electron?.ipcRenderer.invoke("whisper:transcribe", {
+            const resp = await ipc?.invoke("whisper:transcribe", {
                 model: selectedModel,
-                videoPath: absolutePath,   // ✅ real filesystem path
+                videoPath: absolutePath,
             });
 
             if (!resp) throw new Error("IPC returned undefined");
@@ -93,8 +74,7 @@ export default function TranscriptionTab({ setActiveTab }: { setActiveTab: (tab:
             setTranscriptPath(resp.transcriptPath);
             setTranscriptPreview(resp.preview);
             setTranscriptFull(resp.full);
-            setTranscriptSRT(resp.srt);  // ✅
-
+            setTranscriptSRT(resp.srt);
         } catch (e) {
             console.error(e);
             alert("Transcription failed. See logs.");
@@ -103,25 +83,23 @@ export default function TranscriptionTab({ setActiveTab }: { setActiveTab: (tab:
         }
     };
 
-
+    // Logs state
     const [logs, setLogs] = useState<string[]>([]);
-
     const logsEndRef = useRef<HTMLDivElement | null>(null);
     useEffect(() => {
         logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [logs]);
 
     useEffect(() => {
-        const handler = (msg: string) => {
-            setLogs((prev) => [...prev, msg]);
-        };
+        const handler = (msg: string) => setLogs((prev) => [...prev, msg]);
+        ipc?.on?.("whisper:log", handler);
+        return () => ipc?.removeAllListeners?.("whisper:log");
+    }, [ipc]);
 
-        window.electron?.ipcRenderer.on?.("whisper:log", handler);
-
-        return () => {
-            window.electron?.ipcRenderer.removeAllListeners?.("whisper:log");
-        };
+    useEffect(() => {
+        useTranscriptionStore.getState().refreshCacheFromIPC();
     }, []);
+
 
     function parseSRT(srt: string) {
         const blocks = srt.split(/\n\n+/).map((block) => {
@@ -136,51 +114,60 @@ export default function TranscriptionTab({ setActiveTab }: { setActiveTab: (tab:
         return blocks.filter(Boolean);
     }
 
+    // ✅ Download progress for current model
+    const currentProgress =
+        selectedModel && isDownloadingModel(selectedModel)
+            ? getProgressForModel(selectedModel)
+            : null;
+
     return (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
             {/* LEFT: Models */}
             <Card className="lg:col-span-2">
                 <CardHeader>
-                    <CardTitle>Whisper Model</CardTitle>
+                    <CardTitle>Whisper Models</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <WhisperModelDropdown />
-
                     <Separator />
 
                     <div className="space-y-2">
-                        <div className="text-sm text-muted-foreground">
-                            Selected: <span className="font-medium">{selectedModel ?? "—"}</span>
-                        </div>
                         <Button
                             className="w-full"
                             onClick={handleStartTranscription}
-                            disabled={!canStart || isDownloading || isTranscribing}
+                            disabled={!canStart || isTranscribing}
                         >
                             <PlayCircle className="h-4 w-4 mr-2" />
                             {isTranscribing ? "Transcribing..." : "Start Transcription"}
                         </Button>
 
-                        {/* ✅ Logs right below the button */}
-                        <ScrollArea className="h-[300px] rounded border bg-white dark:bg-black text-black dark:text-white font-mono text-xs p-2">
-                            {logs.length === 0 ? (
-                                <div className="text-muted-foreground">Logs will appear here...</div>
-                            ) : (
-                                <>
-                                    {logs.map((line, i) => (
-                                        <div key={i}>{line}</div>
-                                    ))}
-                                    {/* invisible div to scroll into view */}
-                                    <div ref={logsEndRef} />
-                                </>
-                            )}
-                        </ScrollArea>
+                        {/* ✅ Inline progress bar for current model */}
+                        {currentProgress !== null && currentProgress < 100 && (
+                            <div className="flex flex-col gap-1">
+                                <Progress value={currentProgress} className="w-full" />
+                                <span className="text-xs text-muted-foreground">
+                                    Downloading {selectedModel}… {currentProgress}%
+                                </span>
+                            </div>
+                        )}
                     </div>
+
+                    <ScrollArea className="h-[300px] rounded border bg-white dark:bg-black text-black dark:text-white font-mono text-xs p-2">
+                        {logs.length === 0 ? (
+                            <div className="text-muted-foreground">Logs will appear here...</div>
+                        ) : (
+                            <>
+                                {logs.map((line, i) => (
+                                    <div key={i}>{line}</div>
+                                ))}
+                                <div ref={logsEndRef} />
+                            </>
+                        )}
+                    </ScrollArea>
                 </CardContent>
             </Card>
 
-
-            {/* RIGHT: Results / Preview */}
+            {/* RIGHT: Transcript results */}
             <Card className="lg:col-span-3">
                 <CardHeader>
                     <CardTitle>Transcript</CardTitle>
@@ -213,8 +200,7 @@ export default function TranscriptionTab({ setActiveTab }: { setActiveTab: (tab:
                         )}
                     </ScrollArea>
 
-
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                         <Button
                             variant="outline"
                             onClick={() => {
@@ -253,14 +239,16 @@ export default function TranscriptionTab({ setActiveTab }: { setActiveTab: (tab:
                             variant="outline"
                             onClick={async () => {
                                 try {
-                                    const path = await window.electron?.ipcRenderer.invoke("dialog:openSRT");
+                                    const path = await ipc?.invoke("dialog:openSRT");
                                     if (!path) return;
-
-                                    const content = await window.electron?.ipcRenderer.invoke("file:readText", path);
+                                    const content = await ipc?.invoke("file:readText", path);
                                     if (content) {
                                         setTranscriptSRT(content);
                                         setTranscriptPath(path);
-                                        setTranscriptPreview(content.slice(0, 800) + (content.length > 800 ? "\n..." : ""));
+                                        setTranscriptPreview(
+                                            content.slice(0, 800) +
+                                            (content.length > 800 ? "\n..." : "")
+                                        );
                                         setTranscriptFull(content);
                                     }
                                 } catch (e) {
@@ -283,6 +271,7 @@ export default function TranscriptionTab({ setActiveTab }: { setActiveTab: (tab:
                             Remove Transcript
                         </Button>
                     </div>
+
                     <Button
                         className="w-full"
                         onClick={() => setActiveTab("clipSelection")}

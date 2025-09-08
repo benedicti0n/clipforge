@@ -17,6 +17,7 @@ export interface ModelInfo {
     speedHint: "fastest" | "fast" | "balanced" | "accurate" | "most-accurate";
 }
 
+// 🔹 Exported so UI can render model cards
 export const WHISPER_MODELS: ModelInfo[] = [
     { key: "tiny", label: "tiny", sizeMB: 75, note: "Fastest, least accurate", speedHint: "fastest" },
     { key: "base", label: "base", sizeMB: 150, note: "Fast & light", speedHint: "fast" },
@@ -27,60 +28,73 @@ export const WHISPER_MODELS: ModelInfo[] = [
 ];
 
 type CacheMap = Partial<Record<WhisperModel, boolean>>;
-type ProgressMap = Partial<Record<WhisperModel, number>>; // 0-100
+type ProgressMap = Partial<Record<WhisperModel, number>>;
+type DownloadingMap = Partial<Record<WhisperModel, boolean>>;
 
 interface TranscriptionState {
     selectedModel: WhisperModel | null;
     cache: CacheMap;
     downloadProgress: ProgressMap;
-    isDownloading: boolean;
+    downloading: DownloadingMap;
     isTranscribing: boolean;
 
     transcriptPath: string | null;
     transcriptPreview: string;
     transcriptFull: string;
     transcriptedFile: string | null;
-    setTranscriptedFile: (file: string | null) => void;
     transcriptSRT: string | null;
-    setTranscriptSRT: (srt: string | null) => void;
 
-    setSelectedModel: (m: WhisperModel) => void;
+    // setters
+    setTranscriptedFile: (file: string | null) => void;
+    setTranscriptSRT: (srt: string | null) => void;
+    setSelectedModel: (m: WhisperModel | null) => void;
     setCacheFor: (m: WhisperModel, cached: boolean) => void;
     setDownloadProgress: (m: WhisperModel, p: number) => void;
-    setIsDownloading: (v: boolean) => void;
+    setDownloading: (m: WhisperModel, v: boolean) => void;
     setIsTranscribing: (v: boolean) => void;
-
     setTranscriptPath: (p: string | null) => void;
     setTranscriptPreview: (t: string) => void;
     setTranscriptFull: (t: string) => void;
 
     resetResults: () => void;
+
+    // selectors
+    getProgressForModel: (m: WhisperModel) => number | null;
+    isDownloadingModel: (m: WhisperModel) => boolean;
+    isModelCached: (m: WhisperModel) => boolean;
+
+    // new
+    refreshCacheFromIPC: () => Promise<void>;
 }
 
-// ✅ wrap store with persist
 export const useTranscriptionStore = create<TranscriptionState>()(
     persist(
-        (set) => ({
+        (set, get) => ({
             selectedModel: null,
             cache: {},
             downloadProgress: {},
-            isDownloading: false,
+            downloading: {},
             isTranscribing: false,
 
             transcriptPath: null,
             transcriptPreview: "",
             transcriptFull: "",
             transcriptedFile: null,
-            setTranscriptedFile: (file) => set({ transcriptedFile: file }),
             transcriptSRT: null,
-            setTranscriptSRT: (srt: string | null) => set({ transcriptSRT: srt }),
 
+            setTranscriptedFile: (file) => set({ transcriptedFile: file }),
+            setTranscriptSRT: (srt) => set({ transcriptSRT: srt }),
             setSelectedModel: (m) => set({ selectedModel: m }),
+
             setCacheFor: (m, cached) =>
                 set((s) => ({ cache: { ...s.cache, [m]: cached } })),
+
             setDownloadProgress: (m, p) =>
                 set((s) => ({ downloadProgress: { ...s.downloadProgress, [m]: p } })),
-            setIsDownloading: (v) => set({ isDownloading: v }),
+
+            setDownloading: (m, v) =>
+                set((s) => ({ downloading: { ...s.downloading, [m]: v } })),
+
             setIsTranscribing: (v) => set({ isTranscribing: v }),
 
             setTranscriptPath: (p) => set({ transcriptPath: p }),
@@ -92,10 +106,41 @@ export const useTranscriptionStore = create<TranscriptionState>()(
                     transcriptPath: null,
                     transcriptPreview: "",
                     transcriptFull: "",
+                    transcriptSRT: null,
                 }),
+
+            // selectors
+            getProgressForModel: (m) => get().downloadProgress[m] ?? null,
+            isDownloadingModel: (m) => get().downloading[m] ?? false,
+            isModelCached: (m) => get().cache[m] ?? false,
+
+            // ✅ preload cache state from IPC
+            refreshCacheFromIPC: async () => {
+                try {
+                    const ipc = (window as any).electron?.ipcRenderer;
+                    const result: Record<WhisperModel, boolean> = await ipc?.invoke("whisper:listCache");
+                    if (result) {
+                        set({ cache: result });
+                    }
+                } catch (e) {
+                    console.error("Failed to refresh cache from IPC", e);
+                }
+            },
         }),
         {
-            name: "transcription-store", // localStorage key
+            name: "transcription-store",
+            version: 2,
+            migrate: (persisted, version) => {
+                if (version < 2) {
+                    return {
+                        ...persisted,
+                        cache: {},
+                        downloadProgress: {},
+                        downloading: {},
+                    };
+                }
+                return persisted;
+            },
         }
     )
 );
