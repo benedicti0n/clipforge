@@ -15,18 +15,6 @@ import { Progress } from "../../ui/progress";
 import { CheckCircle2, XCircle, ChevronDown, Loader2 } from "lucide-react";
 import { Badge } from "../../ui/badge";
 
-type IPC = {
-    invoke: (channel: string, ...args: any[]) => Promise<any>;
-    on?: (channel: string, listener: (...args: any[]) => void) => void;
-    removeAllListeners?: (channel: string) => void;
-};
-
-declare global {
-    interface Window {
-        electron?: { ipcRenderer: IPC };
-    }
-}
-
 function ModelRow({ m }: { m: { key: WhisperModel; label: string; note: string; sizeMB: number } }) {
     const ipc = window.electron?.ipcRenderer;
 

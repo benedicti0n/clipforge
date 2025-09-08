@@ -14,7 +14,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../ui/tabs";
 import TranscriptPanel from "./TranscriptPanel";
 import SubtitleStylePanel from "./SubtitleStylePanel";
 import CustomTextsPanel from "./CustomTextsPanel";
-import ClipOptionsPanel from "./ClipOptionsPanel";
 
 import type { SubtitleEntry, SubtitleStyle, CustomText } from "../../../../electron/types/subtitleTypes";
 import PresetPanel from "./PresetPanel";
@@ -71,7 +70,6 @@ export default function EditClipModal({
         underline: false,
     });
     const [customTexts, setCustomTexts] = useState<CustomText[]>([]);
-    const [accurateCuts, setAccurateCuts] = useState(false);
 
     // Rendering state
     const [progress, setProgress] = useState(0);
@@ -82,16 +80,6 @@ export default function EditClipModal({
         const scaleX = previewDimensions.width / videoDimensions.width;
         const scaleY = previewDimensions.height / videoDimensions.height;
         return { scaleX, scaleY };
-    };
-
-    // Convert video coordinates to preview coordinates
-    const convertToPreviewCoordinates = (x: number, y: number, fontSize: number) => {
-        const { scaleX, scaleY } = getScalingFactors();
-        return {
-            x: x * scaleX,
-            y: y * scaleY,
-            fontSize: fontSize * Math.min(scaleX, scaleY) // Use minimum scale to maintain proportions
-        };
     };
 
     // Get video metadata
@@ -210,13 +198,18 @@ export default function EditClipModal({
             }
         };
 
+        //@ts-expect-error ipc is not undefined
         ipc.on("skia:progress", onProgress);
+        //@ts-expect-error ipc is not undefined
         ipc.on("skia:done", onDone);
 
         return () => {
+            //@ts-expect-error ipc is not undefined
             ipc.removeListener("skia:progress", onProgress);
+            //@ts-expect-error ipc is not undefined
             ipc.removeListener("skia:done", onDone);
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [clip.filePath]);
 
     useEffect(() => {
@@ -254,11 +247,13 @@ export default function EditClipModal({
             video.removeEventListener('loadedmetadata', handleLoadedMetadata);
             window.removeEventListener('resize', handleResize);
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
     // Update preview dimensions when video dimensions change
     useEffect(() => {
         updatePreviewDimensions();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [videoDimensions]);
 
     const [currentTime, setCurrentTime] = useState(0);

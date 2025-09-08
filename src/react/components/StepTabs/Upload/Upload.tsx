@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useUploadStore } from "../../../store/StepTabs/uploadStore";
 import { Button } from "../../ui/button";
-import { Video, UploadCloud, Trash2, ArrowRight } from "lucide-react";
-import { cn } from "../../../lib/utils";
+import { Video, Trash2, ArrowRight } from "lucide-react";
 
 interface UploadProps {
     setActiveTab: (tab: string) => void;
@@ -12,7 +11,6 @@ interface UploadProps {
 
 export default function Upload({ setActiveTab }: UploadProps) {
     const { absolutePath, previewUrl, setFile, clearFile } = useUploadStore();
-    const [isDragOver, setIsDragOver] = useState(false);
 
     // Metadata states
     const [fileSize, setFileSize] = useState<string | null>(null);
@@ -33,21 +31,6 @@ export default function Upload({ setActiveTab }: UploadProps) {
             setFile(path, previewUrl);
         }
     };
-
-    const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault();
-        const file = e.dataTransfer.files[0];
-        if (!file) return;
-
-        // In Electron, file.path gives you the actual path on disk
-        const path = file.path;
-        const buffer = await window.electron?.ipcRenderer.invoke("file:read", path);
-        const blob = new Blob([buffer], { type: "video/mp4" });
-        const previewUrl = URL.createObjectURL(blob);
-
-        setFile(path, previewUrl);
-    }, [setFile]);
-
 
     // Extract duration & resolution once video metadata is loaded
     useEffect(() => {
@@ -88,6 +71,7 @@ export default function Upload({ setActiveTab }: UploadProps) {
 
                             if ("path" in file) {
                                 // ✅ Running inside Electron
+                                //eslint-disable-next-line @typescript-eslint/no-explicit-any
                                 const path = (file as any).path;
                                 const buffer = await window.electron?.ipcRenderer.invoke("file:read", path);
                                 const blob = new Blob([buffer], { type: file.type || "video/mp4" });
