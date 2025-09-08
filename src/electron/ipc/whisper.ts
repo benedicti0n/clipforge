@@ -7,6 +7,11 @@ import { modelsDir, transcriptsDir } from "../helpers/paths.js";
 import { extractAudioToWav } from "../helpers/ffmpeg.js";
 import { runWhisper } from "../helpers/whisper.js";
 
+//
+// 🔹 Track active downloads in main
+//
+const activeDownloads = new Set<WhisperModelKey>();
+
 export function registerWhisperHandlers() {
     ensureDir(modelsDir());
     ensureDir(transcriptsDir());
@@ -24,30 +29,46 @@ export function registerWhisperHandlers() {
 
         const dest = path.join(modelsDir(), entry.filename);
 
-        // Local copy
-        const localPath = path.join(process.cwd(), "public", "models", entry.filename);
-        const fsSync = await import("fs");
-        if (fsSync.existsSync(localPath)) {
-            fsSync.copyFileSync(localPath, dest);
-            return true;
+        if (activeDownloads.has(modelKey)) {
+            console.warn(`Download for ${modelKey} already in progress`);
+            return false;
         }
+        activeDownloads.add(modelKey);
 
-        // Remote download
-        if (entry.url.startsWith("http")) {
-            await downloadWithProgress(entry.url, dest, (percent) => {
-                try {
-                    e.sender.send("whisper:download:progress", {
-                        model: modelKey,
-                        percent,
-                    });
-                } catch (err) {
-                    console.error("Failed to send progress to renderer", err);
-                }
-            });
-            return true;
+        try {
+            // Local copy (from ./public/models)
+            const localPath = path.join(process.cwd(), "public", "models", entry.filename);
+            const fsSync = await import("fs");
+            if (fsSync.existsSync(localPath)) {
+                fsSync.copyFileSync(localPath, dest);
+
+                e.sender.send("whisper:download:progress", { model: modelKey, percent: 100 });
+                return true;
+            }
+
+            // Remote download
+            if (entry.url.startsWith("http")) {
+                e.sender.send("whisper:download:progress", { model: modelKey, percent: 0 });
+
+                await downloadWithProgress(entry.url, dest, (percent) => {
+                    try {
+                        e.sender.send("whisper:download:progress", {
+                            model: modelKey,
+                            percent,
+                        });
+                    } catch (err) {
+                        console.error("Failed to send progress to renderer", err);
+                    }
+                });
+
+                e.sender.send("whisper:download:progress", { model: modelKey, percent: 100 });
+                return true;
+            }
+
+            throw new Error(`Model not found locally and no remote URL for ${modelKey}`);
+        } finally {
+            activeDownloads.delete(modelKey);
         }
-
-        throw new Error(`Model not found locally and no remote URL for ${modelKey}`);
     });
 
     ipcMain.handle("whisper:transcribe", async (e, { model, videoPath }: { model: WhisperModelKey; videoPath: string | null }) => {
@@ -95,4 +116,10 @@ export function registerWhisperHandlers() {
         return result;
     });
 
+    //
+    // 🔹 New: allow renderer to resync active downloads after reload
+    //
+    ipcMain.handle("whisper:activeDownloads", () => {
+        return Array.from(activeDownloads);
+    });
 }

@@ -9,6 +9,7 @@ import {
     useIsDownloadingModel,
     useIsModelCached,
     useSelectedModel,
+    useResyncDownloads, // ✅ added
 } from "../../../store/StepTabs/transcriptionStore";
 import { Button } from "../../ui/button";
 import { Progress } from "../../ui/progress";
@@ -91,10 +92,13 @@ function ModelRow({ m }: { m: { key: WhisperModel; label: string; note: string; 
                         )}
                     </div>
 
-                    {progress !== null && progress < 100 && (
+                    {/* ✅ Show progress if downloading (even after reload) */}
+                    {downloading && (
                         <div className="mt-2">
-                            <Progress value={progress} className="w-48" />
-                            <span className="text-xs">{progress}%</span>
+                            <Progress value={progress ?? 0} className="w-48" />
+                            <span className="text-xs">
+                                {progress !== null ? `${progress}%` : "Starting…"}
+                            </span>
                         </div>
                     )}
                 </div>
@@ -137,6 +141,9 @@ export default function WhisperModelDropdown() {
     const triggerRef = useRef<HTMLButtonElement | null>(null);
     const panelRef = useRef<HTMLDivElement | null>(null);
     const setDownloadProgress = useTranscriptionStore((s) => s.setDownloadProgress);
+
+    // ✅ auto resync downloading state after reload
+    useResyncDownloads();
 
     // close on outside click
     useEffect(() => {

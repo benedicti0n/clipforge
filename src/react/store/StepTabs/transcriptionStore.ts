@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { useEffect } from "react";
 
 export type WhisperModel =
     | "tiny"
@@ -111,9 +112,8 @@ export const useTranscriptionStore = create<TranscriptionState>()(
 );
 
 //
-// 🔹 Reactive selector hooks (subscribe components to updates)
+// 🔹 Hooks for selectors
 //
-
 export const useProgressForModel = (model: WhisperModel) =>
     useTranscriptionStore((s) => s.downloadProgress[model] ?? null);
 
@@ -128,3 +128,26 @@ export const useSelectedModel = () =>
 
 export const useIsTranscribing = () =>
     useTranscriptionStore((s) => s.isTranscribing);
+
+//
+// 🔹 Auto-resync active downloads from main process on mount
+//
+export function useResyncDownloads() {
+    const setDownloading = useTranscriptionStore((s) => s.setDownloading);
+
+    useEffect(() => {
+        const ipc = window.electron?.ipcRenderer;
+        if (!ipc) return;
+
+        ipc.invoke("whisper:activeDownloads")
+            .then((active: WhisperModel[]) => {
+                // reset all downloading state
+                WHISPER_MODELS.forEach((m) => setDownloading(m.key, false));
+                // mark active ones
+                active.forEach((m) => setDownloading(m, true));
+            })
+            .catch((err) => {
+                console.error("Failed to resync active downloads:", err);
+            });
+    }, [setDownloading]);
+}
