@@ -2,7 +2,7 @@ import { Slider } from "../../ui/slider";
 import { Input } from "../../ui/input";
 import { Switch } from "../../ui/switch";  // ✅ add this
 
-import type { SubtitleStyle } from "../../../../types/subtitleTypes";
+import type { SubtitleStyle } from "../../../../electron/types/subtitleTypes";
 import { loadFontToCSS } from "../../../utils/fontManager";
 import { useEffect, useRef } from "react";
 import { Upload } from "lucide-react";

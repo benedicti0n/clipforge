@@ -1,8 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useUploadStore } from "../../../store/StepTabs/uploadStore";
-import { useTranscriptionStore } from "../../../store/StepTabs/transcriptionStore";
+import {
+    useTranscriptionStore,
+    useSelectedModel,
+    useIsModelCached,
+    useIsDownloadingModel,
+    useProgressForModel,
+    useIsTranscribing,
+    type WhisperModel,
+} from "../../../store/StepTabs/transcriptionStore";
 import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
 import { Separator } from "../../ui/separator";
 import { Button } from "../../ui/button";
@@ -23,39 +31,71 @@ declare global {
     }
 }
 
+// 🔹 Inline progress component with “Completed ✅”
+function CurrentModelProgress({ model }: { model: WhisperModel }) {
+    const progress = useProgressForModel(model);
+    const isDownloading = useIsDownloadingModel(model);
+
+    const [showCompleted, setShowCompleted] = useState(false);
+
+    useEffect(() => {
+        if (progress === 100) {
+            setShowCompleted(true);
+            const t = setTimeout(() => setShowCompleted(false), 2000);
+            return () => clearTimeout(t);
+        }
+    }, [progress]);
+
+    if (showCompleted) {
+        return (
+            <span className="text-xs text-green-600 font-medium">
+                Completed ✅
+            </span>
+        );
+    }
+
+    if (!isDownloading || progress === null || progress >= 100) return null;
+
+    return (
+        <div className="flex flex-col gap-1">
+            <Progress value={progress} className="w-full" />
+            <span className="text-xs text-muted-foreground">
+                Downloading {model}… {progress}%
+            </span>
+        </div>
+    );
+}
+
 export default function TranscriptionTab({
     setActiveTab,
 }: {
     setActiveTab: (tab: string) => void;
 }) {
-    const {
-        selectedModel,
-        isModelCached,
-        isDownloadingModel,
-        getProgressForModel,
-        isTranscribing,
-        setIsTranscribing,
-        transcriptPath,
-        transcriptFull,
-        setTranscriptPath,
-        setTranscriptPreview,
-        setTranscriptFull,
-        setTranscriptSRT,
-        transcriptSRT,
-        resetResults,
-    } = useTranscriptionStore();
+    const selectedModel = useSelectedModel();
+    const isTranscribing = useIsTranscribing();
+
+    const setIsTranscribing = useTranscriptionStore((s) => s.setIsTranscribing);
+    const setTranscriptPath = useTranscriptionStore((s) => s.setTranscriptPath);
+    const setTranscriptPreview = useTranscriptionStore(
+        (s) => s.setTranscriptPreview
+    );
+    const setTranscriptFull = useTranscriptionStore((s) => s.setTranscriptFull);
+    const setTranscriptSRT = useTranscriptionStore((s) => s.setTranscriptSRT);
+    const transcriptPath = useTranscriptionStore((s) => s.transcriptPath);
+    const transcriptFull = useTranscriptionStore((s) => s.transcriptFull);
+    const transcriptSRT = useTranscriptionStore((s) => s.transcriptSRT);
+    const resetResults = useTranscriptionStore((s) => s.resetResults);
 
     const ipc = window.electron?.ipcRenderer;
     const { absolutePath } = useUploadStore();
 
-    // ✅ canStart now uses selectors
-    const canStart = useMemo(() => {
-        if (!absolutePath) return false;
-        if (!selectedModel) return false;
-        if (!isModelCached(selectedModel)) return false;
-        if (isDownloadingModel(selectedModel)) return false;
-        return true;
-    }, [absolutePath, selectedModel, isModelCached, isDownloadingModel]);
+    // ✅ Always call hooks unconditionally with fallback
+    const isCached = useIsModelCached(selectedModel ?? "tiny");
+    const isDownloading = useIsDownloadingModel(selectedModel ?? "tiny");
+
+    // ✅ Derived boolean
+    const canStart =
+        !!absolutePath && !!selectedModel && isCached && !isDownloading;
 
     const handleStartTranscription = async () => {
         if (!absolutePath || !selectedModel) return;
@@ -96,11 +136,6 @@ export default function TranscriptionTab({
         return () => ipc?.removeAllListeners?.("whisper:log");
     }, [ipc]);
 
-    useEffect(() => {
-        useTranscriptionStore.getState().refreshCacheFromIPC();
-    }, []);
-
-
     function parseSRT(srt: string) {
         const blocks = srt.split(/\n\n+/).map((block) => {
             const lines = block.split("\n");
@@ -113,12 +148,6 @@ export default function TranscriptionTab({
         });
         return blocks.filter(Boolean);
     }
-
-    // ✅ Download progress for current model
-    const currentProgress =
-        selectedModel && isDownloadingModel(selectedModel)
-            ? getProgressForModel(selectedModel)
-            : null;
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
@@ -142,19 +171,14 @@ export default function TranscriptionTab({
                         </Button>
 
                         {/* ✅ Inline progress bar for current model */}
-                        {currentProgress !== null && currentProgress < 100 && (
-                            <div className="flex flex-col gap-1">
-                                <Progress value={currentProgress} className="w-full" />
-                                <span className="text-xs text-muted-foreground">
-                                    Downloading {selectedModel}… {currentProgress}%
-                                </span>
-                            </div>
-                        )}
+                        {selectedModel && <CurrentModelProgress model={selectedModel} />}
                     </div>
 
                     <ScrollArea className="h-[300px] rounded border bg-white dark:bg-black text-black dark:text-white font-mono text-xs p-2">
                         {logs.length === 0 ? (
-                            <div className="text-muted-foreground">Logs will appear here...</div>
+                            <div className="text-muted-foreground">
+                                Logs will appear here...
+                            </div>
                         ) : (
                             <>
                                 {logs.map((line, i) => (

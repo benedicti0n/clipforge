@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 
-import type { SubtitleStyle, CustomText } from "../../../../types/subtitleTypes";
+import type { SubtitleStyle, CustomText } from "../../../../electron/types/subtitleTypes";
 
 interface Preset {
     name: string;

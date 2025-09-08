@@ -3,7 +3,7 @@
 import { Input } from "../../ui/input";
 import { Slider } from "../../ui/slider";
 import { Button } from "../../ui/button";
-import type { CustomText } from "../../../../types/subtitleTypes";
+import type { CustomText } from "../../../../electron/types/subtitleTypes";
 
 interface CustomTextsPanelProps {
     texts: CustomText[];

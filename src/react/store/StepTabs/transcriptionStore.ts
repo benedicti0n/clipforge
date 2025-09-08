@@ -17,7 +17,6 @@ export interface ModelInfo {
     speedHint: "fastest" | "fast" | "balanced" | "accurate" | "most-accurate";
 }
 
-// 🔹 Exported so UI can render model cards
 export const WHISPER_MODELS: ModelInfo[] = [
     { key: "tiny", label: "tiny", sizeMB: 75, note: "Fastest, least accurate", speedHint: "fastest" },
     { key: "base", label: "base", sizeMB: 150, note: "Fast & light", speedHint: "fast" },
@@ -28,7 +27,7 @@ export const WHISPER_MODELS: ModelInfo[] = [
 ];
 
 type CacheMap = Partial<Record<WhisperModel, boolean>>;
-type ProgressMap = Partial<Record<WhisperModel, number>>;
+type ProgressMap = Partial<Record<WhisperModel, number>>; // 0–100
 type DownloadingMap = Partial<Record<WhisperModel, boolean>>;
 
 interface TranscriptionState {
@@ -57,19 +56,11 @@ interface TranscriptionState {
     setTranscriptFull: (t: string) => void;
 
     resetResults: () => void;
-
-    // selectors
-    getProgressForModel: (m: WhisperModel) => number | null;
-    isDownloadingModel: (m: WhisperModel) => boolean;
-    isModelCached: (m: WhisperModel) => boolean;
-
-    // new
-    refreshCacheFromIPC: () => Promise<void>;
 }
 
 export const useTranscriptionStore = create<TranscriptionState>()(
     persist(
-        (set, get) => ({
+        (set) => ({
             selectedModel: null,
             cache: {},
             downloadProgress: {},
@@ -90,10 +81,14 @@ export const useTranscriptionStore = create<TranscriptionState>()(
                 set((s) => ({ cache: { ...s.cache, [m]: cached } })),
 
             setDownloadProgress: (m, p) =>
-                set((s) => ({ downloadProgress: { ...s.downloadProgress, [m]: p } })),
+                set((s) => ({
+                    downloadProgress: { ...s.downloadProgress, [m]: p },
+                })),
 
             setDownloading: (m, v) =>
-                set((s) => ({ downloading: { ...s.downloading, [m]: v } })),
+                set((s) => ({
+                    downloading: { ...s.downloading, [m]: v },
+                })),
 
             setIsTranscribing: (v) => set({ isTranscribing: v }),
 
@@ -108,39 +103,28 @@ export const useTranscriptionStore = create<TranscriptionState>()(
                     transcriptFull: "",
                     transcriptSRT: null,
                 }),
-
-            // selectors
-            getProgressForModel: (m) => get().downloadProgress[m] ?? null,
-            isDownloadingModel: (m) => get().downloading[m] ?? false,
-            isModelCached: (m) => get().cache[m] ?? false,
-
-            // ✅ preload cache state from IPC
-            refreshCacheFromIPC: async () => {
-                try {
-                    const ipc = (window as any).electron?.ipcRenderer;
-                    const result: Record<WhisperModel, boolean> = await ipc?.invoke("whisper:listCache");
-                    if (result) {
-                        set({ cache: result });
-                    }
-                } catch (e) {
-                    console.error("Failed to refresh cache from IPC", e);
-                }
-            },
         }),
         {
             name: "transcription-store",
-            version: 2,
-            migrate: (persisted, version) => {
-                if (version < 2) {
-                    return {
-                        ...persisted,
-                        cache: {},
-                        downloadProgress: {},
-                        downloading: {},
-                    };
-                }
-                return persisted;
-            },
         }
     )
 );
+
+//
+// 🔹 Reactive selector hooks (subscribe components to updates)
+//
+
+export const useProgressForModel = (model: WhisperModel) =>
+    useTranscriptionStore((s) => s.downloadProgress[model] ?? null);
+
+export const useIsDownloadingModel = (model: WhisperModel) =>
+    useTranscriptionStore((s) => s.downloading[model] ?? false);
+
+export const useIsModelCached = (model: WhisperModel) =>
+    useTranscriptionStore((s) => s.cache[model] ?? false);
+
+export const useSelectedModel = () =>
+    useTranscriptionStore((s) => s.selectedModel);
+
+export const useIsTranscribing = () =>
+    useTranscriptionStore((s) => s.isTranscribing);

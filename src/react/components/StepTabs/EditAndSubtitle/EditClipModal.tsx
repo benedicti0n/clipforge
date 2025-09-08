@@ -16,7 +16,7 @@ import SubtitleStylePanel from "./SubtitleStylePanel";
 import CustomTextsPanel from "./CustomTextsPanel";
 import ClipOptionsPanel from "./ClipOptionsPanel";
 
-import type { SubtitleEntry, SubtitleStyle, CustomText } from "../../../../types/subtitleTypes";
+import type { SubtitleEntry, SubtitleStyle, CustomText } from "../../../../electron/types/subtitleTypes";
 import PresetPanel from "./PresetPanel";
 import BgMusicPanel from "./BgMusicPanel";
 

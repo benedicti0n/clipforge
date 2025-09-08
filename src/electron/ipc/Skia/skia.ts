@@ -15,7 +15,7 @@ import type {
     SubtitleEntry,
     SubtitleStyle,
     CustomText,
-} from "../../../types/subtitleTypes";
+} from "../../types/subtitleTypes.js"
 
 interface SkiaPayload {
     filePath: string;

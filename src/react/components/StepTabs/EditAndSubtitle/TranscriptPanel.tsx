@@ -6,7 +6,7 @@ import { Input } from "../../ui/input";
 import { Textarea } from "../../ui/textarea";
 import { ScrollArea } from "../../ui/scroll-area";
 
-import type { SubtitleEntry } from "../../../../types/subtitleTypes";
+import type { SubtitleEntry } from "../../../../electron/types/subtitleTypes";
 import { Plus } from "lucide-react";
 
 // --- utils ---
