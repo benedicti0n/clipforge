@@ -5,11 +5,19 @@ import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Textarea } from "../../ui/textarea";
 import { ScrollArea } from "../../ui/scroll-area";
+import { Badge } from "../../ui/badge";
 
 import type { SubtitleEntry } from "../../../../electron/types/subtitleTypes";
-import { Plus } from "lucide-react";
+import WhisperModelDropdown from "../Transcription/WhisperModelDropdown"; // 🔧 adjust path if needed
+import {
+    useSelectedModel,
+    useIsModelCached,
+    useTranscriptionStore,
+    type WhisperModel,
+} from "../../../store/StepTabs/transcriptionStore";
 
-// --- utils ---
+/* ---------------- utils ---------------- */
+
 // parse raw SRT string → SubtitleEntry[]
 function parseSRT(srt: string): SubtitleEntry[] {
     return srt
@@ -71,6 +79,18 @@ function splitEntry(entry: SubtitleEntry, wordsPerLine: number): SubtitleEntry[]
     }));
 }
 
+/* ------------- key bridge (renderer → main) -------------
+   If your main's WHISPER_MODEL_FILES uses different keys
+   (e.g. large-v2 / large-v3), map them here. */
+const MODEL_KEY_BRIDGE: Record<WhisperModel, string> = {
+    tiny: "tiny",
+    base: "base",
+    small: "small",
+    medium: "medium",
+    "large-turbo": "large-v3", // 👈 map turbo → v3 (adjust if your main differs)
+    large: "large-v2",          // 👈 map large → v2 (adjust if your main differs)
+};
+
 interface TranscriptPanelProps {
     subtitles: SubtitleEntry[];
     setSubtitles: (subs: SubtitleEntry[]) => void;
@@ -82,14 +102,20 @@ export default function TranscriptPanel({
     setSubtitles,
     videoPath,
 }: TranscriptPanelProps) {
+    const ipc = typeof window !== "undefined" ? window.electron?.ipcRenderer : undefined;
+
+    const selectedModel = useSelectedModel();
+    const isCachedSelected = selectedModel ? useIsModelCached(selectedModel) : false;
+
+    // (optional) also reflect global transcribing state in store if you want
+    const setIsTranscribing = useTranscriptionStore((s) => s.setIsTranscribing);
+
     const [activeIndex, setActiveIndex] = useState<number | null>(null);
     const [loading, setLoading] = useState(false);
     const [wordsPerLine, setWordsPerLine] = useState(5);
 
     const updateLine = (index: number, patch: Partial<SubtitleEntry>) => {
-        setSubtitles(
-            subtitles.map((s, i) => (i === index ? { ...s, ...patch } : s))
-        );
+        setSubtitles(subtitles.map((s, i) => (i === index ? { ...s, ...patch } : s)));
     };
 
     const deleteLine = (index: number) => {
@@ -110,39 +136,85 @@ export default function TranscriptPanel({
             alert("No video file path provided");
             return;
         }
+        if (!ipc) {
+            alert("IPC not available. Are you in Electron renderer?");
+            return;
+        }
+        if (!selectedModel) {
+            alert("Select a Whisper model first.");
+            return;
+        }
+
+        const bridgedKey = MODEL_KEY_BRIDGE[selectedModel] ?? selectedModel;
+
+        // Double-check cache in MAIN to avoid exit code 3 if store is stale
+        const isActuallyCached = await ipc.invoke("whisper:checkCache", bridgedKey);
+        if (!isActuallyCached) {
+            alert(
+                `The selected model "${selectedModel}" is not downloaded yet.\n` +
+                `Open the dropdown, click "Download", then try again.`
+            );
+            return;
+        }
+
         setLoading(true);
+        setIsTranscribing?.(true);
         try {
             const resp: {
                 transcriptPath: string;
                 preview: string;
                 full: string;
                 srt: string;
-            } = await window.electron?.ipcRenderer.invoke("whisper:transcribe", {
-                model: "base",
+            } | undefined = await ipc.invoke("whisper:transcribe", {
+                model: bridgedKey, // ✅ use bridged key sent to main
                 videoPath,
             });
 
             if (resp?.srt) {
                 const parsed = parseSRT(resp.srt);
-                // ✅ split entries into smaller chunks
-                const chunked = parsed.flatMap((entry) =>
-                    splitEntry(entry, wordsPerLine)
-                );
+                const chunked = parsed.flatMap((entry) => splitEntry(entry, wordsPerLine));
                 setSubtitles(chunked);
+            } else {
+                alert("No SRT returned from transcription.");
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("Transcription failed:", err);
-            alert("Failed to generate transcript. See logs.");
+            const msg = (err?.message || String(err)).slice(0, 2000);
+            alert(`Failed to generate transcript:\n\n${msg}`);
         } finally {
             setLoading(false);
+            setIsTranscribing?.(false);
         }
     };
 
     return (
         <div className="flex flex-col h-full">
-            <div className="flex justify-between items-center mb-2">
-                <h4 className="font-semibold text-sm">Transcript</h4>
-                <div className="flex gap-2 items-center">
+            {/* Header row: title + model selector + actions */}
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+                <div className="flex items-center gap-3">
+                    <h4 className="font-semibold text-sm">Transcript</h4>
+
+                    {/* Selected model & cache badge */}
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Model:</span>
+                        <div className="min-w-[220px]">
+                            <WhisperModelDropdown />
+                        </div>
+                        {selectedModel && (
+                            <Badge
+                                variant={isCachedSelected ? "secondary" : "destructive"}
+                                className={`text-xs ${isCachedSelected
+                                        ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                                        : ""
+                                    }`}
+                            >
+                                {isCachedSelected ? "Cached" : "Not cached"}
+                            </Badge>
+                        )}
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">Words/line</span>
                     <Input
                         type="number"
@@ -154,21 +226,16 @@ export default function TranscriptPanel({
                             setWordsPerLine(Math.max(2, Math.min(12, Number(e.target.value) || 5)))
                         }
                     />
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={handleGenerateTranscript}
-                        disabled={loading}
-                    >
+                    <Button size="sm" variant="outline" onClick={handleGenerateTranscript} disabled={loading}>
                         {loading ? "Transcribing..." : "Generate"}
                     </Button>
-                    <Button size="sm" onClick={addLine} className="flex items-center gap-1">
-                        <Plus className="w-4 h-4" />
+                    <Button size="sm" onClick={addLine}>
                         Add Line
                     </Button>
                 </div>
             </div>
 
+            {/* List */}
             <ScrollArea className="flex-1 border rounded p-2 space-y-2">
                 {subtitles.length === 0 && (
                     <p className="text-sm text-muted-foreground">No subtitles yet.</p>
@@ -176,9 +243,7 @@ export default function TranscriptPanel({
                 {subtitles.map((s, i) => (
                     <div
                         key={i}
-                        className={`p-2 rounded border cursor-pointer ${activeIndex === i
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted"
+                        className={`p-2 rounded border cursor-pointer transition-colors ${i === activeIndex ? "bg-primary text-primary-foreground" : "bg-muted"
                             }`}
                         onClick={() => setActiveIndex(i)}
                     >
@@ -190,15 +255,14 @@ export default function TranscriptPanel({
                 ))}
             </ScrollArea>
 
+            {/* Editor */}
             {activeIndex !== null && (
                 <div className="mt-3 border rounded p-3 space-y-2">
                     <div className="flex gap-2">
                         <Input
                             className="text-xs"
                             value={subtitles[activeIndex].start}
-                            onChange={(e) =>
-                                updateLine(activeIndex, { start: e.target.value })
-                            }
+                            onChange={(e) => updateLine(activeIndex, { start: e.target.value })}
                         />
                         <Input
                             className="text-xs"
@@ -212,11 +276,7 @@ export default function TranscriptPanel({
                         rows={3}
                     />
                     <div className="flex justify-end">
-                        <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => deleteLine(activeIndex)}
-                        >
+                        <Button variant="destructive" size="sm" onClick={() => deleteLine(activeIndex)}>
                             Delete Line
                         </Button>
                     </div>
