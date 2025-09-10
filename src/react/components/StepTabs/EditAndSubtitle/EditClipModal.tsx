@@ -199,13 +199,20 @@ export default function EditClipModal({
         };
 
         //@ts-expect-error ipc is not undefined
-        ipc.on("skia:progress", onProgress);
+        ipc.on("skia:progress", (_e, d: { percent: number; phase: "pass1" | "pass2" }) => {
+            // Optionally display "Subtitles ..." or "Custom texts ..."
+            setProgress(d.percent);
+        });
+
         //@ts-expect-error ipc is not undefined
         ipc.on("skia:done", onDone);
 
         return () => {
             //@ts-expect-error ipc is not undefined
-            ipc.removeListener("skia:progress", onProgress);
+            ipc.on("skia:progress", (_e, d: { percent: number; phase: "pass1" | "pass2" }) => {
+                // Optionally display "Subtitles ..." or "Custom texts ..."
+                setProgress(d.percent);
+            });
             //@ts-expect-error ipc is not undefined
             ipc.removeListener("skia:done", onDone);
         };

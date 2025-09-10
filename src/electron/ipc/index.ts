@@ -4,7 +4,7 @@ import { registerClipHandlers } from "./clip.js";
 import { registerWhisperHandlers } from "./whisper.js";
 import { registerGeminiHandlers } from "./gemini.js";
 import { registerKeysHandlers } from "./keys.js";
-import { registerSkiaHandlers } from './Skia/skia.js'
+import { registerSkiaHandlers } from './skia.js'
 import { registerFontHandlers } from "./fonts.js"
 import { registerSavedHandlers } from "./saved.js"
 import { registerPresetHandlers } from "./preset.js"
