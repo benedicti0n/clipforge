@@ -37,7 +37,6 @@
     "clsx": "^2.1.1",
     "ffmpeg-static": "^5.2.0",
     "ffprobe-static": "^3.1.0",
-    "js-tiktoken": "^1.0.21",
     "lucide-react": "^0.542.0",
     "node-fetch": "^3.3.2",
     "react": "^19.1.1",
