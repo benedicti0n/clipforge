@@ -1,16 +1,39 @@
 {
-    "appId": "com.benedicti0n.clipforge",
-    "files": ["dist-electron", "dist-react"],
-    "extraResources": ["dist-electron/preload.cjs", "src/assets/**",{ "from": "public/bin", "to": "bin" },"assets/fonts/**"],
-    "icon": "./desktopIcon.png",
-    "mac": {
-      "target": "dmg"
-    },
-    "linux": {
-      "target": "AppImage",  
-      "category": "Utility"
-    },
-    "win": {
-      "target": ["portable", "msi"]
-    }
+  "appId": "com.benedicti0n.clipforge",
+  "productName": "Clipforge",
+  "files": [
+    "dist-electron",
+    "dist-react"
+  ],
+  "extraResources": [
+    "dist-electron/preload.cjs",
+    "src/assets/**",
+    { "from": "public/bin", "to": "bin" },
+    "assets/fonts/**"
+  ],
+  "icon": "./desktopIcon.png",
+  "mac": {
+    "target": ["dmg", "zip"],
+    "category": "public.app-category.video"
+  },
+  "dmg": {
+    "background": "build/background.png",
+    "iconSize": 100,
+    "contents": [
+      { "x": 130, "y": 220, "type": "file" },
+      { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+    ]
+  },
+  "linux": {
+    "target": ["AppImage"],
+    "category": "Utility"
+  },
+  "win": {
+    "target": ["nsis", "zip"]
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true
   }
+}
