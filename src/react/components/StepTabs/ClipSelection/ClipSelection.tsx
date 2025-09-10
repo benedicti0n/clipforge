@@ -365,6 +365,17 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
                                     Est. cost: ${estimateCost(outputTokens, GEMINI_MODELS.find(m => m.id === selectedModel)?.outPrice ?? 0).toFixed(4)}
                                 </div>
                             )}
+
+                            {/* ✅ Total estimated cost */}
+                            <div className="font-semibold text-foreground">
+                                Total est. cost: $
+                                {(
+                                    estimateCost(inputTokens, GEMINI_MODELS.find(m => m.id === selectedModel)?.inPrice ?? 0) +
+                                    (outputTokens > 0
+                                        ? estimateCost(outputTokens, GEMINI_MODELS.find(m => m.id === selectedModel)?.outPrice ?? 0)
+                                        : 0)
+                                ).toFixed(4)}
+                            </div>
                         </div>
                     )}
                 </CardContent>
