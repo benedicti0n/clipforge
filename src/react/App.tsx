@@ -20,10 +20,10 @@ function App() {
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
+      <Button className="fixed z-50 bottom-1 right-1" onClick={toggleTheme}>
+        {theme === "dark" ? <Moon /> : <Sun />}
+      </Button>
       <div className="min-h-screen w-full p-4">
-        <Button className="absolute bottom-1 right-1" onClick={toggleTheme}>
-          {theme === "dark" ? <Moon /> : <Sun />}
-        </Button>
 
         <div className="w-full">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
