@@ -179,13 +179,6 @@ export default function EditClipModal({
         const ipc = window.electron?.ipcRenderer;
         if (!ipc) return;
 
-        const onProgress = (
-            _event: unknown,
-            data: { frame: number; total: number; percent: number }
-        ) => {
-            setProgress(data.percent);
-        };
-
         const onDone = (_event: unknown, data?: { outPath?: string }) => {
             console.log("[renderer] got skia:done", data);
             setRendering(false);
