@@ -10,6 +10,7 @@ import { ScrollArea } from "../../ui/scroll-area";
 import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
+import { useUploadStore } from "../../../store/StepTabs/uploadStore";
 
 type ApiKey = { name: string; key: string };
 
@@ -237,6 +238,15 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
         reader.readAsText(file);
     };
 
+    function getBaseName(filePath: string) {
+        const parts = filePath.split(/[\\/]/); // split by slash or backslash
+        const file = parts[parts.length - 1];
+        return file.replace(/\.[^/.]+$/, ""); // remove extension
+    }
+
+    const { absolutePath } = useUploadStore();
+    const videoBaseName = absolutePath ? getBaseName(absolutePath) : "transcript";
+
     return (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
             {/* LEFT: API + Model + Prompt */}
@@ -419,7 +429,7 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
                                         const url = URL.createObjectURL(blob);
                                         const a = document.createElement("a");
                                         a.href = url;
-                                        a.download = "clip_candidates.json";
+                                        a.download = `${videoBaseName}_viral.json`;
                                         a.click();
                                         URL.revokeObjectURL(url);
                                     }}
