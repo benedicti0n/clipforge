@@ -1,5 +1,11 @@
 import type { SubtitleEntry, SubtitleStyle, CustomText } from "../types/subtitleTypes.js";
 
+/** 
+ * Global scale to make libass sizes match CSS preview more closely.
+ * Tweak between ~0.80–0.92 if needed for your environment.
+ */
+const ASS_FONT_SCALE = 0.4;
+
 /** Build ASS header with a style derived from SubtitleStyle */
 function buildAssHeader(opts: {
     style: SubtitleStyle,
@@ -17,8 +23,8 @@ function buildAssHeader(opts: {
     // BorderStyle: 1=outline, 3=opaque box
     const borderStyle = s.backgroundEnabled ? 3 : 1;
 
-    // Stroke width -> Outline (ASS expects integer-ish; decimals ok)
-    const outlineW = Math.max(0, s.strokeWidth ?? 0);
+    // Stroke width -> Outline (ASS expects number; we'll scale to match visual)
+    const outlineW = round2(Math.max(0, (s.strokeWidth ?? 0) * ASS_FONT_SCALE));
     const shadow = 0;
 
     // Bold / Italic / Underline: -1 = on, 0 = off
@@ -27,7 +33,7 @@ function buildAssHeader(opts: {
     const underline = s.underline ? -1 : 0;
 
     const fontName = s.fontFamily || "Arial";
-    const fontSize = s.fontSize || 28;
+    const fontSize = Math.max(1, Math.round((s.fontSize || 28) * ASS_FONT_SCALE));
 
     return [
         "[Script Info]",
@@ -77,7 +83,7 @@ export function buildAssForCustomTexts(opts: {
     height: number,
     defaultDurationSec: number,
 }) {
-    // Use a generic style; per-item we override via \pos and inline overrides if needed
+    // Generic base style; per-item we override via \pos and inline tags
     const defaultStyle: SubtitleStyle = {
         fontSize: 28,
         fontColor: "#ffffff",
@@ -105,11 +111,11 @@ export function buildAssForCustomTexts(opts: {
         const px = (t.x / 100) * opts.width;
         const py = (t.y / 100) * opts.height;
 
-        // Inline overrides for color/opacity/outline/fontsize (ass supports per-line overrides)
-        const fontSize = t.fontSize ?? 28;
+        // Inline overrides (scaled for libass parity)
+        const fontSize = Math.max(1, Math.round((t.fontSize ?? 28) * ASS_FONT_SCALE));
         const primary = hexToAssColor(t.fontColor || "#ffffff", t.opacity ?? 100);
         const outline = hexToAssColor(t.strokeColor || "#000000", t.opacity ?? 100);
-        const outlineW = Math.max(0, t.strokeWidth ?? 0);
+        const outlineW = round2(Math.max(0, (t.strokeWidth ?? 0) * ASS_FONT_SCALE));
         const bold = t.bold ? "\\b1" : "\\b0";
         const italic = t.italic ? "\\i1" : "\\i0";
         const underline = t.underline ? "\\u1" : "\\u0";
@@ -175,4 +181,8 @@ function hexToAssColor(hex: string, opacityPct: number) {
     const GG = g.toString(16).toUpperCase().padStart(2, "0");
     const RR = r.toString(16).toUpperCase().padStart(2, "0");
     return `&H${A}${BB}${GG}${RR}`;
+}
+
+function round2(n: number) {
+    return Math.round(n * 100) / 100;
 }
