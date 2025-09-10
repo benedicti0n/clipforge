@@ -266,8 +266,8 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
                                 onChange={(e) => setNewKey(e.target.value)}
                             />
                             <div className="flex gap-2">
-                                <Button onClick={handleAddKey} className="w-full">Save Locally</Button>
-                                <Button variant="ghost" onClick={() => setShowAddKeyForm(false)}>Cancel</Button>
+                                <Button onClick={handleAddKey} className="flex-1">Save Locally</Button>
+                                <Button variant="outline" onClick={() => setShowAddKeyForm(false)}>Cancel</Button>
                             </div>
                         </div>
                     ) : (

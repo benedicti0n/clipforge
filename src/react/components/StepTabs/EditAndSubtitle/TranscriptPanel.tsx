@@ -112,7 +112,7 @@ export default function TranscriptPanel({
 
     const [activeIndex, setActiveIndex] = useState<number | null>(null);
     const [loading, setLoading] = useState(false);
-    const [wordsPerLine, setWordsPerLine] = useState(5);
+    const [wordsPerLine, setWordsPerLine] = useState(3);
 
     const updateLine = (index: number, patch: Partial<SubtitleEntry>) => {
         setSubtitles(subtitles.map((s, i) => (i === index ? { ...s, ...patch } : s)));
@@ -204,8 +204,8 @@ export default function TranscriptPanel({
                             <Badge
                                 variant={isCachedSelected ? "secondary" : "destructive"}
                                 className={`text-xs ${isCachedSelected
-                                        ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
-                                        : ""
+                                    ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                                    : ""
                                     }`}
                             >
                                 {isCachedSelected ? "Cached" : "Not cached"}
@@ -223,7 +223,7 @@ export default function TranscriptPanel({
                         min={2}
                         max={12}
                         onChange={(e) =>
-                            setWordsPerLine(Math.max(2, Math.min(12, Number(e.target.value) || 5)))
+                            setWordsPerLine(Math.max(2, Math.min(12, Number(e.target.value) || 3)))
                         }
                     />
                     <Button size="sm" variant="outline" onClick={handleGenerateTranscript} disabled={loading}>
