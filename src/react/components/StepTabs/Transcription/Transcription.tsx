@@ -136,6 +136,17 @@ export default function TranscriptionTab({
         return () => ipc?.removeAllListeners?.("whisper:log");
     }, [ipc]);
 
+    useEffect(() => {
+        const handleStopped = () => {
+            setLogs(["⚠️ Transcription stopped by user."]);
+            setIsTranscribing(false);
+        };
+        ipc?.on?.("whisper:stopped", handleStopped);
+        return () => ipc?.removeAllListeners?.("whisper:stopped");
+        // eslint-disable-next-line 
+    }, [ipc]);
+
+
     function parseSRT(srt: string) {
         const blocks = srt.split(/\n\n+/).map((block) => {
             const lines = block.split("\n");
@@ -161,16 +172,30 @@ export default function TranscriptionTab({
                     <Separator />
 
                     <div className="space-y-2">
-                        <Button
-                            className="w-full"
-                            onClick={handleStartTranscription}
-                            disabled={!canStart || isTranscribing}
-                        >
-                            <PlayCircle className="h-4 w-4 mr-2" />
-                            {isTranscribing ? "Transcribing..." : "Start Transcription"}
-                        </Button>
+                        {isTranscribing ? (
+                            <Button
+                                className="w-full"
+                                variant="destructive"
+                                onClick={async () => {
+                                    await ipc?.invoke("whisper:stop");
+                                    resetResults();
+                                    setLogs([]);
+                                    setIsTranscribing(false);
+                                }}
+                            >
+                                Stop Transcription
+                            </Button>
+                        ) : (
+                            <Button
+                                className="w-full"
+                                onClick={handleStartTranscription}
+                                disabled={!canStart}
+                            >
+                                <PlayCircle className="h-4 w-4 mr-2" />
+                                Start Transcription
+                            </Button>
+                        )}
 
-                        {/* ✅ Inline progress bar for current model */}
                         {selectedModel && <CurrentModelProgress model={selectedModel} />}
                     </div>
 

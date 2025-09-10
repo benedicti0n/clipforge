@@ -6,6 +6,10 @@ import { WHISPER_MODEL_FILES, WhisperModelKey } from "../constants/whisper.js";
 import { modelsDir, transcriptsDir } from "../helpers/paths.js";
 import { extractAudioToWav } from "../helpers/ffmpeg.js";
 import { runWhisper } from "../helpers/whisper.js";
+import { ChildProcess } from "child_process";
+
+let activeWhisperProcess: ChildProcess | null = null;
+
 
 //
 // 🔹 Track active downloads in main
@@ -80,13 +84,31 @@ export function registerWhisperHandlers() {
         const wavPath = await extractAudioToWav(videoPath);
         const baseName = path.parse(videoPath).name + "-" + Date.now().toString(36);
 
-        const out = await runWhisper(modelPath, wavPath, baseName, e.sender);
+        // runWhisper should return process + output paths
+        const out = await runWhisper(modelPath, wavPath, baseName, e.sender, (proc) => {
+            activeWhisperProcess = proc;
+        });
+
+        activeWhisperProcess = null; // reset after done
 
         const full = (await fileExists(out.txt)) ? await readText(out.txt) : "";
         const preview = full.slice(0, 1200) + (full.length > 1200 ? "\n..." : "");
         const srt = (await fileExists(out.srt)) ? await readText(out.srt) : "";
 
         return { transcriptPath: out.srt, preview, full, srt };
+    });
+
+    ipcMain.handle("whisper:stop", async () => {
+        if (activeWhisperProcess) {
+            try {
+                activeWhisperProcess.kill("SIGINT");
+                activeWhisperProcess = null;
+                return { success: true };
+            } catch (err) {
+                return { success: false, error: String(err) };
+            }
+        }
+        return { success: false, message: "No active transcription" };
     });
 
     ipcMain.handle("whisper:deleteModel", async (_e, modelKey: WhisperModelKey) => {
