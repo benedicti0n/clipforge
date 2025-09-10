@@ -1,6 +1,6 @@
-import { ipcMain, BrowserWindow } from "electron";
+import { ipcMain, BrowserWindow, app } from "electron";
 import path from "node:path";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
 import { buildAssForSubtitles, buildAssForCustomTexts } from "../util/ass.js";
 import { ffprobeInfo, spawnFfmpeg } from "../util/ffmpeg.js";
 import type { SubtitleEntry, SubtitleStyle, CustomText } from "../types/subtitleTypes.js";
@@ -16,8 +16,13 @@ type RenderPayload = {
     videoDimensions: { width: number; height: number; aspectRatio: number };
 };
 
-const OUT_DIR = path.join(process.cwd(), "exports");
-if (!existsSync(OUT_DIR)) mkdirSync(OUT_DIR, { recursive: true });
+// Prefer a writable base (userData) if cwd isn’t writable in some envs.
+// You can switch to process.cwd() if you really want to keep it next to the app.
+const BASE_DIR = app ? app.getPath("userData") : process.cwd();
+const OUT_DIR = path.join(BASE_DIR, "exports");
+
+// Ensure once at module load (best-effort)
+safeMkdir(OUT_DIR);
 
 export function registerSkiaHandlers() {
     ipcMain.handle("skia:render", async (evt, payload: RenderPayload) => {
@@ -25,73 +30,102 @@ export function registerSkiaHandlers() {
         const sendProgress = (phase: "pass1" | "pass2", percent: number) =>
             win?.webContents.send("skia:progress", { frame: 0, total: 100, percent, phase });
 
-        const baseIn = payload.filePath;
-        const pass1Out = path.join(OUT_DIR, `clip_${payload.index}_pass1.mp4`);
+        // Re-ensure the out dir at call time (handles race/packaged envs)
+        safeMkdir(OUT_DIR);
+
+        // Use MKV for lossless 4:4:4 intermediate (mp4+444 can be quirky)
+        const pass1Out = path.join(OUT_DIR, `clip_${payload.index}_pass1.mkv`);
         const finalOut = path.join(OUT_DIR, `clip_${payload.index}_final.mp4`);
+        // Make sure parent dirs exist (paranoid, but safe)
+        safeMkdir(path.dirname(pass1Out));
+        safeMkdir(path.dirname(finalOut));
+
+        // Paths we will clean up on success
+        let ass1Path = "";
+        let ass2Path = "";
+
+        const cleanup = () => {
+            const maybeDelete = (p: string) => {
+                if (!p) return;
+                try { unlinkSync(p); } catch { }
+            };
+            maybeDelete(ass1Path);
+            maybeDelete(ass2Path);
+            maybeDelete(pass1Out);
+        };
 
         try {
-            // probe duration for progress calc
-            const info = await ffprobeInfo(baseIn);
+            // Probe input for progress mapping
+            const info = await ffprobeInfo(payload.filePath);
             const duration = info.durationSec || 0;
 
-            // ---------- PASS 1: Subtitles via ASS ----------
+            // ---------- PASS 1: Subtitles (lossless, 4:4:4) ----------
+            ass1Path = path.join(OUT_DIR, `clip_${payload.index}_subs.ass`);
+            safeMkdir(path.dirname(ass1Path)); // <-- ensure dir exists
             const ass1 = buildAssForSubtitles({
                 subs: payload.subtitles,
                 style: payload.subtitleStyle,
                 width: payload.videoDimensions.width,
                 height: payload.videoDimensions.height,
             });
-            const ass1Path = path.join(OUT_DIR, `clip_${payload.index}_subs.ass`);
             writeFileSync(ass1Path, ass1, "utf8");
 
             await spawnFfmpeg(
                 [
                     "-y",
-                    "-i", baseIn,
+                    "-i", payload.filePath,
                     "-vf", `ass=${ffEscapePath(ass1Path)}`,
-                    "-c:v", "h264",
-                    "-preset", "veryfast",
-                    "-pix_fmt", "yuv420p",
-                    "-movflags", "+faststart",
+                    "-c:v", "libx264",
+                    "-qp", "0",              // true lossless (x264)
+                    "-pix_fmt", "yuv444p",   // full chroma — sharp edges
+                    "-preset", "fast",
                     "-c:a", "copy",
                     pass1Out,
                 ],
                 (curSec) => {
-                    // map 0..duration to ~0..99
                     const p = duration > 0 ? Math.min(99, Math.round((curSec / duration) * 99)) : 0;
                     sendProgress("pass1", p);
                 }
             );
 
-            // ---------- PASS 2: Custom texts via ASS (+ optional bg music mix) ----------
+            // ---------- PASS 2: Custom texts (+ optional bg music), delivery encode ----------
             const info2 = await ffprobeInfo(pass1Out);
             const duration2 = info2.durationSec || 0;
 
+            ass2Path = path.join(OUT_DIR, `clip_${payload.index}_custom.ass`);
+            safeMkdir(path.dirname(ass2Path)); // <-- ensure dir exists
             const ass2 = buildAssForCustomTexts({
                 texts: payload.customTexts,
                 width: payload.videoDimensions.width,
                 height: payload.videoDimensions.height,
                 defaultDurationSec: duration2,
             });
-            const ass2Path = path.join(OUT_DIR, `clip_${payload.index}_custom.ass`);
             writeFileSync(ass2Path, ass2, "utf8");
 
+            const videoEncodeArgs = [
+                "-c:v", "libx264",
+                "-crf", "18",             // high quality
+                "-preset", "slow",        // better detail retention
+                "-pix_fmt", "yuv420p",    // social-friendly
+                "-movflags", "+faststart",
+            ];
+
             if (payload.bgMusic?.path) {
+                const vol = Number.isFinite(payload.bgMusic.volume)
+                    ? Math.max(0, Math.min(2, payload.bgMusic.volume))
+                    : 1.0;
+
                 await spawnFfmpeg(
                     [
                         "-y",
                         "-i", pass1Out,
                         "-i", payload.bgMusic.path,
                         "-filter_complex",
-                        // video burn + audio mix
                         `[0:v]ass=${ffEscapePath(ass2Path)}[v];` +
-                        `[0:a][1:a]amix=inputs=2:duration=shortest:dropout_transition=0,volume=1.0[a]`,
+                        `[0:a][1:a]amix=inputs=2:duration=shortest:dropout_transition=0,volume=${vol.toFixed(2)}[a]`,
                         "-map", "[v]",
                         "-map", "[a]",
-                        "-c:v", "h264",
-                        "-preset", "veryfast",
-                        "-pix_fmt", "yuv420p",
-                        "-movflags", "+faststart",
+                        ...videoEncodeArgs,
                         "-c:a", "aac",
                         "-b:a", "192k",
                         finalOut,
@@ -107,10 +141,7 @@ export function registerSkiaHandlers() {
                         "-y",
                         "-i", pass1Out,
                         "-vf", `ass=${ffEscapePath(ass2Path)}`,
-                        "-c:v", "h264",
-                        "-preset", "veryfast",
-                        "-pix_fmt", "yuv420p",
-                        "-movflags", "+faststart",
+                        ...videoEncodeArgs,
                         "-c:a", "copy",
                         finalOut,
                     ],
@@ -121,10 +152,14 @@ export function registerSkiaHandlers() {
                 );
             }
 
+            // Success → clean intermediates
+            cleanup();
+
             win?.webContents.send("skia:done", { outPath: finalOut });
             return finalOut;
         } catch (err) {
             console.error("[skia:render] failed:", err);
+            // Keep intermediates on failure for debugging
             BrowserWindow.fromWebContents(evt.sender)
                 ?.webContents.send("skia:done", { outPath: undefined });
             throw err;
@@ -133,7 +168,18 @@ export function registerSkiaHandlers() {
 }
 
 function ffEscapePath(p: string) {
-    // ffmpeg filter arg escaping (path inside filter)
-    // Escape backslashes and colons on Windows; for *nix, just escape ':' and '\'
+    // Safe for ffmpeg filter arg: wrap in single quotes and escape any single quotes inside.
     return `'${p.replace(/'/g, "'\\''")}'`;
+}
+
+function safeMkdir(dir: string) {
+    try {
+        if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    } catch (e) {
+        // As a fallback, try to create parent
+        try {
+            mkdirSync(path.dirname(dir), { recursive: true });
+            if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+        } catch { /* noop */ }
+    }
 }
