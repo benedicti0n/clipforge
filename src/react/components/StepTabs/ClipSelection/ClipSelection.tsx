@@ -20,30 +20,40 @@ const GEMINI_MODELS = [
         label: "Gemini 1.5 Pro",
         price: "$7/million in, $21/million out",
         speed: "High accuracy, slower",
+        inPrice: 7,   // $ per 1M input tokens
+        outPrice: 21, // $ per 1M output tokens
     },
     {
         id: "gemini-1.5-flash-latest",
         label: "Gemini 1.5 Flash",
         price: "$0.35/million in, $1.05/million out",
         speed: "Fast, balanced",
+        inPrice: 0.35,
+        outPrice: 1.05,
     },
     {
         id: "gemini-2.5-pro-latest",
         label: "Gemini 2.5 Pro",
         price: "$10/million in, $30/million out",
         speed: "Most accurate, slower",
+        inPrice: 10,
+        outPrice: 30,
     },
     {
         id: "gemini-2.5-flash-latest",
         label: "Gemini 2.5 Flash",
         price: "$0.50/million in, $1.50/million out",
         speed: "Fast, good balance",
+        inPrice: 0.5,
+        outPrice: 1.5,
     },
     {
         id: "gemini-2.5-flash-lite-latest",
         label: "Gemini 2.5 Flash Lite",
         price: "$0.10/million in, $0.30/million out",
         speed: "Ultra fast, cheaper",
+        inPrice: 0.1,
+        outPrice: 0.3,
     },
 ];
 
@@ -85,6 +95,23 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
             }
         });
     }, [addApiKey]);
+
+    const [inputTokens, setInputTokens] = useState(0);
+    const [outputTokens, setOutputTokens] = useState(0);
+
+    function estimateTokens(text: string): number {
+        return Math.ceil(text.length / 4); // rough heuristic
+    }
+
+    function estimateCost(tokens: number, ratePerMillion: number): number {
+        return (tokens / 1_000_000) * ratePerMillion;
+    }
+
+    useEffect(() => {
+        if (transcriptSRT && selectedModel) {
+            setInputTokens(estimateTokens(transcriptSRT));
+        }
+    }, [transcriptSRT, selectedModel]);
 
     // --- Add new key locally + persist ---
     const handleAddKey = async () => {
@@ -147,7 +174,6 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
         });
     }, []);
 
-
     // --- Send request to Gemini ---
     const handleSendToGemini = async () => {
         const activeKey = apiKeys.find((k) => k.name === selectedApiKey)?.key;
@@ -174,6 +200,8 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
 
             const parsed = JSON.parse(text);
             setClipCandidates(parsed);
+
+            setOutputTokens(estimateTokens(JSON.stringify(parsed)));
         } catch (e) {
             console.error("Gemini error:", e);
             alert("Gemini request failed. Check logs and API key.");
@@ -195,6 +223,9 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
                 const parsed = JSON.parse(text);
                 if (Array.isArray(parsed)) {
                     setClipCandidates(parsed);
+
+                    // 🔑 Estimate tokens + update cost just like after Gemini response
+                    setOutputTokens(estimateTokens(JSON.stringify(parsed)));
                 } else {
                     alert("⚠️ Invalid JSON format. Expected an array.");
                 }
@@ -321,6 +352,21 @@ export default function ClipSelection({ setActiveTab }: { setActiveTab: (tab: st
                     <ScrollArea className="h-[200px] border rounded p-2 text-sm">
                         {promptText || <span className="text-muted-foreground">Select a prompt type</span>}
                     </ScrollArea>
+
+                    {selectedModel && (
+                        <div className="text-xs text-muted-foreground space-y-1">
+                            <div>
+                                Input tokens: {inputTokens.toLocaleString()} ·
+                                Est. cost: ${estimateCost(inputTokens, GEMINI_MODELS.find(m => m.id === selectedModel)?.inPrice ?? 0).toFixed(4)}
+                            </div>
+                            {outputTokens > 0 && (
+                                <div>
+                                    Output tokens: {outputTokens.toLocaleString()} ·
+                                    Est. cost: ${estimateCost(outputTokens, GEMINI_MODELS.find(m => m.id === selectedModel)?.outPrice ?? 0).toFixed(4)}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 
