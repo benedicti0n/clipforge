@@ -87,7 +87,15 @@ export default function TranscriptionTab({
     const resetResults = useTranscriptionStore((s) => s.resetResults);
 
     const ipc = window.electron?.ipcRenderer;
+
+    function getBaseName(filePath: string) {
+        const parts = filePath.split(/[\\/]/); // split by slash or backslash
+        const file = parts[parts.length - 1];
+        return file.replace(/\.[^/.]+$/, ""); // remove extension
+    }
+
     const { absolutePath } = useUploadStore();
+    const videoBaseName = absolutePath ? getBaseName(absolutePath) : "transcript";
 
     // ✅ Always call hooks unconditionally with fallback
     const isCached = useIsModelCached(selectedModel ?? "tiny");
@@ -145,7 +153,6 @@ export default function TranscriptionTab({
         return () => ipc?.removeAllListeners?.("whisper:stopped");
         // eslint-disable-next-line 
     }, [ipc]);
-
 
     function parseSRT(srt: string) {
         const blocks = srt.split(/\n\n+/).map((block) => {
@@ -258,7 +265,7 @@ export default function TranscriptionTab({
                                 const url = URL.createObjectURL(blob);
                                 const a = document.createElement("a");
                                 a.href = url;
-                                a.download = "transcript.txt";
+                                a.download = `${videoBaseName}.txt`;
                                 a.click();
                                 URL.revokeObjectURL(url);
                             }}
@@ -275,7 +282,7 @@ export default function TranscriptionTab({
                                 const url = URL.createObjectURL(blob);
                                 const a = document.createElement("a");
                                 a.href = url;
-                                a.download = "transcript.srt";
+                                a.download = `${videoBaseName}.srt`;
                                 a.click();
                                 URL.revokeObjectURL(url);
                             }}
