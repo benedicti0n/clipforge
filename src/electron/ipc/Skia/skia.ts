@@ -1,452 +1,449 @@
-import { ipcMain, IpcMainInvokeEvent, BrowserWindow, app } from "electron";
+import { app, ipcMain, IpcMainInvokeEvent } from "electron";
 import path from "path";
-import fs from "fs/promises";
-import { Canvas, FontLibrary } from "skia-canvas";
+import fs from "fs";
+import { spawn } from "node:child_process";
+import { Canvas, loadImage } from "skia-canvas";
+type SKRSContext2D = CanvasRenderingContext2D;
+import ffmpegStatic from "ffmpeg-static";
+import ffprobeStatic from "ffprobe-static";
+import { SubtitleStyle, CustomText, SubtitleEntry } from "../../types/subtitleTypes.js"
 
-import { ensureClipsDir } from "../../helpers/clip.js";
-import { runFFmpeg } from "../../helpers/ffmpeg.js";
+type Nullable<T> = T | null | undefined;
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
-
-import type {
-    SubtitleEntry,
-    SubtitleStyle,
-    CustomText,
-} from "../../types/subtitleTypes.js"
-
-interface SkiaPayload {
+interface RenderPayload {
     filePath: string;
     subtitles: SubtitleEntry[];
     subtitleStyle: SubtitleStyle;
-    customTexts: CustomText[];                // static (no timing) overlays
+    customTexts: CustomText[];
     index: number;
-    fps?: number;
-    fonts?: { name: string; path: string }[]; // uploaded fonts (renderer side)
+    fonts: { name: string; path: string }[];
     bgMusic?: { path: string; volume: number };
-    videoDimensions?: { width: number; height: number }; // from renderer preview
+    videoDimensions: { width: number; height: number; aspectRatio: number };
 }
 
-export function registerSkiaHandlers() {
-    ipcMain.handle("skia:render", async (e: IpcMainInvokeEvent, payload: SkiaPayload) => {
-        const {
-            filePath,
-            subtitles,
-            subtitleStyle,
-            customTexts,
-            index,
-            fps = 30,  // Default FPS if not provided
-            fonts = [],
-            bgMusic,
-            videoDimensions,
-        } = payload;
+// ================== Utils ==================
+function srtToSeconds(srtTime: string): number {
+    // "HH:MM:SS,mmm"
+    const [hms, ms] = srtTime.split(",");
+    const [hh, mm, ss] = hms.split(":").map(Number);
+    return hh * 3600 + mm * 60 + ss + (Number(ms) || 0) / 1000;
+}
 
-        if (!filePath) throw new Error("filePath missing");
-        const web = BrowserWindow.fromWebContents(e.sender);
+function hexWithAlpha(hex: string, alpha0to100: number): string {
+    // hex "#RRGGBB" → "#RRGGBBAA"
+    const a = Math.max(0, Math.min(100, alpha0to100));
+    const alpha = Math.round((a / 100) * 255)
+        .toString(16)
+        .padStart(2, "0");
+    return `${hex}${alpha}`;
+}
 
-        // === Paths & dirs ===
-        const outDir = await ensureClipsDir();
-        const parsed = path.parse(filePath);
-        const outPath = path.join(outDir, `${parsed.name}-${index}.mp4`);
-        const assPath = path.join(outDir, `${parsed.name}-${index}.ass`);
-        const overlayPng = path.join(outDir, `${parsed.name}-${index}-overlay.png`);
+function roundedRect(ctx: SKRSContext2D, x: number, y: number, w: number, h: number, r: number) {
+    const radius = Math.min(r, Math.min(w, h) / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+}
 
-        // fonts directory you already use in your app (where fonts:save stores files)
-        const fontsDir = path.join(app.getPath("userData"), "fonts");
+function ensureDir(p: string) {
+    fs.mkdirSync(p, { recursive: true });
+}
 
-        // === Dimensions (to match preview 1:1) ===
-        const vidW = Math.max(2, Math.floor(videoDimensions?.width ?? 1920));
-        const vidH = Math.max(2, Math.floor(videoDimensions?.height ?? 1080));
+function rmrf(p: string) {
+    try { fs.rmSync(p, { recursive: true, force: true }); } catch { }
+}
 
-        // === GET VIDEO DURATION ===
-        let durationSec = 10; // fallback
-        try {
-            durationSec = await getVideoDuration(filePath);
-        } catch (error) {
-            console.warn("Could not get video duration, using fallback:", error);
-        }
-
-        try {
-            // 1) Generate ASS subtitles (PlayRes = video size for best fidelity)
-            const ass = generateASS(subtitles, subtitleStyle, vidW, vidH);
-            await fs.writeFile(assPath, ass, "utf-8");
-
-            // 2) Overlays
-            safeRegisterFontsForSkia(fonts);
-
-            const hasOverlay = customTexts.length > 0;
-            const hasTimedTexts = hasOverlay && customTexts.some(t => t.start || t.end);
-
-            const inputs: string[] = ["-i", filePath];
-            let nextInputIndex = 1;
-            let overlayIndex: number | undefined;
-
-            if (hasOverlay) {
-                if (hasTimedTexts) {
-                    // PNG SEQUENCE when timing is used
-                    const overlayDir = path.join(outDir, `overlay-${index}`);
-                    await renderCustomTextsOverlaySeq(
-                        customTexts,
-                        { width: vidW, height: vidH },
-                        fps,
-                        durationSec,
-                        overlayDir,
-                        web?.webContents
-                    );
-
-                    inputs.push(
-                        "-framerate", fps.toString(),
-                        "-i", path.join(overlayDir, "overlay-%05d.png")
-                    );
-                    overlayIndex = nextInputIndex;
-                    nextInputIndex++;
-                } else {
-                    // STATIC overlay (fast path)
-                    const overlayStaticPng = path.join(outDir, `${parsed.name}-${index}-overlay-static.png`);
-                    await renderStaticCustomOverlayPNG(customTexts, { width: vidW, height: vidH }, overlayStaticPng);
-
-                    // loop the image for full duration
-                    inputs.push(
-                        "-loop", "1",
-                        "-t", String(durationSec),
-                        "-i", overlayStaticPng
-                    );
-                    overlayIndex = nextInputIndex;
-                    nextInputIndex++;
-                }
-            }
-
-            const hasBg = Boolean(bgMusic?.path);
-            if (hasBg) {
-                inputs.push("-i", bgMusic!.path!);
-                nextInputIndex++;
-            }
-
-            const vGraph = buildVideoGraph({
-                assPath,
-                fontsDir,
-                hasOverlay,
-                overlayIndex,
-            });
-
-            const aGraph = buildAudioGraph({
-                hasBg,
-                bgIndex: hasBg ? (hasOverlay ? 2 : 1) : undefined,
-                bgVolume: bgMusic?.volume ?? 50,
-            });
-
-            const ffArgs = [
-                "-y",
-                ...inputs,
-                "-filter_complex", `${vGraph};${aGraph}`,
-                "-map", "[vout]",
-                "-map", "[aout]",
-                "-c:v", "libx264",
-                "-preset", "fast",
-                "-crf", "23",
-                "-c:a", "aac",
-                "-shortest",
-                outPath,
-            ];
-
-            await runFFmpeg(ffArgs);
-
-            web?.webContents.send("skia:done", { outPath });
-            return outPath;
-        } finally {
-            try { await fs.rm(assPath, { force: true }); } catch { }
-            // Clean static overlay if created
+async function probe(input: string): Promise<{ duration: number; fps: number; width: number; height: number }> {
+    return new Promise((resolve, reject) => {
+        const args = [
+            "-v", "error",
+            "-print_format", "json",
+            "-show_streams",
+            "-show_format",
+            input,
+        ];
+        const proc = spawn(ffprobeStatic.path, args);
+        let out = "";
+        let err = "";
+        proc.stdout.on("data", d => (out += d.toString()));
+        proc.stderr.on("data", d => (err += d.toString()));
+        proc.on("close", () => {
             try {
-                const staticPng = path.join(outDir, `${parsed.name}-${index}-overlay-static.png`);
-                await fs.rm(staticPng, { force: true });
-            } catch { }
-
-            // Clean seq
-            if (customTexts.length > 0) {
-                try {
-                    const overlayDir = path.join(outDir, `overlay-${index}`);
-                    await fs.rm(overlayDir, { recursive: true, force: true });
-                } catch { }
+                const json = JSON.parse(out);
+                const vstream = (json.streams || []).find((s: any) => s.codec_type === "video");
+                const r = vstream?.r_frame_rate || vstream?.avg_frame_rate || "30/1";
+                const [num, den] = r.split("/").map(Number);
+                const fps = den ? num / den : Number(r) || 30;
+                const duration = Number(json.format?.duration || vstream?.duration || 0);
+                const width = vstream?.width || 1920;
+                const height = vstream?.height || 1080;
+                resolve({ duration, fps, width, height });
+            } catch (e) {
+                reject(new Error(`ffprobe parse error: ${e}\n${err}`));
             }
-        }
+        });
     });
 }
 
-// Helper function to get video duration using ffprobe
-async function getVideoDuration(filePath: string): Promise<number> {
-    try {
-        const { stdout } = await execAsync(`ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${filePath}"`);
-        const duration = parseFloat(stdout.trim());
-        return duration > 0 ? duration : 10; // fallback to 10 seconds if invalid
-    } catch (error) {
-        console.error("Failed to get video duration:", error);
-        return 10; // fallback duration
-    }
-}
-/* ----------------------------- Helpers ----------------------------- */
-
-/** Build the video filter graph:
- *  0:v -> subtitles(ass,fontsdir) -> [vsub]
- *  if overlay: [vsub][overlay] overlay=0:0:format=auto -> [vout]
- *  else:       [vsub] -> [vout]
- */
-function buildVideoGraph(opts: {
-    assPath: string;
-    fontsDir: string;
-    hasOverlay: boolean;
-    overlayIndex?: number;
-}) {
-    const { assPath, fontsDir, hasOverlay, overlayIndex } = opts;
-    const assPosix = toPosix(assPath);
-    const fontsPosix = toPosix(fontsDir);
-
-    const subs = `[0:v]subtitles=filename='${assPosix}':fontsdir='${fontsPosix}'[vsub]`;
-
-    if (!hasOverlay) {
-        // pass-through but make encoder-safe
-        return `${subs};[vsub]scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p[vout]`;
-    }
-
-    // overlay + make encoder-safe
-    return `${subs};[vsub][${overlayIndex}:v]overlay=0:0:format=auto,scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p[vout]`;
-}
-
-
-/** Build the audio graph:
- *  if bg:
- *    [0:a]volume=1[a0];[N:a]volume=vol[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]
- *  else:
- *    [0:a]anull[aout]
- */
-function buildAudioGraph(opts: { hasBg: boolean; bgIndex?: number; bgVolume: number }) {
-    const { hasBg, bgIndex, bgVolume } = opts;
-    if (!hasBg || bgIndex == null) {
-        return `[0:a]anull[aout]`;
-    }
-    const vol = Math.max(0, Math.min(100, bgVolume)) / 100;
-    return `[0:a]volume=1[a0];[${bgIndex}:a]volume=${vol}[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]`;
-}
-
-/** Generate an ASS file matching your style. */
-function generateASS(subs: SubtitleEntry[], style: SubtitleStyle, playX: number, playY: number) {
-    // ASS color format is &HAABBGGRR (alpha first), libass expects BGR with alpha
-    const assColor = (hex: string, alphaPct = 0) => {
-        const clean = hex.replace("#", "");
-        const r = parseInt(clean.slice(0, 2), 16);
-        const g = parseInt(clean.slice(2, 4), 16);
-        const b = parseInt(clean.slice(4, 6), 16);
-        const a = Math.round((alphaPct / 100) * 255);
-        // pad to 2 hex digits
-        const H = (n: number) => n.toString(16).toUpperCase().padStart(2, "0");
-        return `&H${H(a)}${H(b)}${H(g)}${H(r)}`; // &HAABBGGRR
-    };
-
-    const primary = assColor(style.fontColor, 100 - (style.opacity ?? 100));
-    const outline = assColor(style.strokeColor, 0);
-    // Opaque box: BorderStyle=3 uses BackColour as box color
-    const useBox = !!style.backgroundEnabled;
-    const back = useBox
-        ? assColor(style.backgroundColor, 100 - (style.backgroundOpacity ?? 50))
-        : "&H00000000";
-
-    const borderStyle = useBox ? 3 : 1; // 3 = boxed
-    const outlineWidth = Math.max(0, style.strokeWidth ?? 0);
-    const shadow = 0;
-
-    const header = `[Script Info]
-; Script generated by ClipForge
-ScriptType: v4.00+
-PlayResX: ${playX}
-PlayResY: ${playY}
-ScaledBorderAndShadow: yes
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,${style.fontFamily},${style.fontSize},${primary},&H00FFFFFF,${outline},${back},${style.bold ? -1 : 0},${style.italic ? -1 : 0},${style.underline ? -1 : 0},0,100,100,0,0,${borderStyle},${outlineWidth},${shadow},5,${style.backgroundPadding ?? 10},${style.backgroundPadding ?? 10},${style.backgroundPadding ?? 10},0
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
-
-    const toAssTime = (srt: string) => {
-        // SRT "HH:MM:SS,mmm" -> ASS "H:MM:SS.cc"
-        const [h, m, sMs] = srt.split(":");
-        const [sec, ms] = sMs.split(",");
-        const total = parseInt(h) * 3600 + parseInt(m) * 60 + parseInt(sec) + parseInt(ms) / 1000;
-        const hh = Math.floor(total / 3600);
-        const mm = Math.floor((total % 3600) / 60);
-        const ss = Math.floor(total % 60);
-        const cs = Math.round((total - Math.floor(total)) * 100);
-        return `${hh}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
-    };
-
-    // Position in pixels using \pos() and center alignment (\an5).
-    const posX = Math.round((style.x / 100) * playX);
-    const posY = Math.round((style.y / 100) * playY);
-    const posTag = `{\\an5\\pos(${posX},${posY})}`;
-
-    const events = subs
-        .map((s) => {
-            const txt = escapeAssText(s.text);
-            return `Dialogue: 0,${toAssTime(s.start)},${toAssTime(s.end)},Default,,0,0,0,,${posTag}${txt}`;
-        })
-        .join("\n");
-
-    return `${header}\n${events}`;
-}
-
-/** Render custom texts into a PNG sequence with timing. */
-async function renderCustomTextsOverlaySeq(
-    texts: CustomText[],
-    size: { width: number; height: number },
-    fps: number,
-    duration: number, // seconds
-    outDir: string,
-    web?: Electron.WebContents
-) {
-    await fs.mkdir(outDir, { recursive: true });
-    const totalFrames = Math.ceil(duration * fps);
-
-    const toSeconds = (time?: string) => {
-        if (!time) return 0;
-        const [h, m, sMs] = time.split(":");
-        const [s, ms] = sMs.split(",");
-        return parseInt(h) * 3600 + parseInt(m) * 60 + parseInt(s) + parseInt(ms) / 1000;
-    };
-
-    const timedTexts = texts.map((t) => ({
-        ...t,
-        startSec: toSeconds(t.start),
-        endSec: toSeconds(t.end) || duration,
-    }));
-
-    for (let i = 0; i < totalFrames; i++) {
-        const tSec = i / fps;
-        const canvas = new Canvas(size.width, size.height);
-        const ctx = canvas.getContext("2d");
-
-        // Start with transparent background
-        ctx.clearRect(0, 0, size.width, size.height);
-
-        for (const t of timedTexts) {
-            if (tSec < t.startSec || tSec > t.endSec) continue; // inactive
-
-            const weight = t.bold ? "bold" : "normal";
-            const style = t.italic ? "italic" : "normal";
-            ctx.font = `${style} ${weight} ${t.fontSize}px ${t.fontFamily}`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.globalAlpha = (t.opacity ?? 100) / 100;
-
-            const px = (size.width * t.x) / 100;
-            const py = (size.height * t.y) / 100;
-
-            // Draw stroke first if enabled
-            if ((t.strokeWidth ?? 0) > 0) {
-                ctx.lineWidth = t.strokeWidth ?? 0;
-                ctx.strokeStyle = t.strokeColor ?? "#000";
-                ctx.strokeText(t.text, px, py);
+// ================== Drawers ==================
+function applyFontRegistration(fonts: { name: string; path: string }[]) {
+    for (const f of fonts) {
+        try {
+            if ((Canvas as any).FontLibrary?.use) {
+                (Canvas as any).FontLibrary.use(f.path, f.name);
+            } else if ((Canvas as any).Fonts?.use) {
+                (Canvas as any).Fonts.use(f.path, f.name);
+            } else {
+                console.warn("[skia] No font library available in Canvas, skipping font registration");
             }
-
-            // Draw fill text
-            ctx.fillStyle = t.fontColor ?? "#fff";
-            ctx.fillText(t.text, px, py);
-
-            // Draw underline if enabled
-            if (t.underline) {
-                const metrics = ctx.measureText(t.text);
-                const uy = py + t.fontSize * 0.15;
-                ctx.beginPath();
-                ctx.moveTo(px - metrics.width / 2, uy);
-                ctx.lineTo(px + metrics.width / 2, uy);
-                ctx.lineWidth = Math.max(1, t.strokeWidth ?? 1);
-                ctx.strokeStyle = t.fontColor ?? "#fff";
-                ctx.stroke();
-            }
-            ctx.globalAlpha = 1;
+        } catch (e) {
+            console.warn("[skia] failed to register font:", f, e);
         }
+    }
+}
 
-        const buf = await canvas.png;
-        const fname = path.join(outDir, `overlay-${String(i + 1).padStart(5, "0")}.png`);
-        await fs.writeFile(fname, buf);
+function setCtxFont(ctx: SKRSContext2D, fontFamily: string, fontSize: number, bold?: boolean, italic?: boolean) {
+    const weight = bold ? "700" : "400";
+    const style = italic ? "italic" : "normal";
+    ctx.font = `${style} ${weight} ${fontSize}px "${fontFamily}"`;
+}
 
-        if (i % 30 === 0 && web) {
-            web.send("skia:progress", {
-                frame: i + 1,
-                total: totalFrames,
-                percent: Math.round(((i + 1) / totalFrames) * 100),
+function drawTextWithStyle(
+    ctx: any,
+    text: string,
+    xPct: number,
+    yPct: number,
+    videoW: number,
+    videoH: number,
+    options: {
+        fontFamily: string;
+        fontSize: number;
+        fill: string;
+        stroke?: string;
+        strokeWidth?: number;
+        opacity?: number;
+        bold?: boolean;
+        italic?: boolean;
+        underline?: boolean;
+        bg?: { enabled: boolean; color: string; opacity: number; radius: number; padding: number };
+        center?: boolean; // default true
+    }
+) {
+    const x = (xPct / 100) * videoW;
+    const y = (yPct / 100) * videoH;
+    const {
+        fontFamily, fontSize, fill, stroke, strokeWidth = 0, opacity = 100,
+        bold, italic, underline,
+        bg = { enabled: false, color: "#000000", opacity: 0, radius: 0, padding: 0 },
+        center = true,
+    } = options;
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, opacity / 100));
+    setCtxFont(ctx, fontFamily, fontSize, bold, italic);
+    ctx.textBaseline = "middle";
+    ctx.textAlign = center ? "center" : "left";
+
+    // Measure
+    const metrics = ctx.measureText(text);
+    const textW = metrics.width;
+    // Approx line height (Canvas text metrics are limited)
+    const lineH = fontSize * 1.2;
+
+    // Background rounded rect
+    if (bg.enabled && bg.opacity > 0) {
+        const pad = bg.padding;
+        const left = (center ? x - textW / 2 : x) - pad;
+        const top = y - lineH / 2 - pad;
+        const w = textW + pad * 2;
+        const h = lineH + pad * 2;
+
+        ctx.fillStyle = hexWithAlpha(bg.color, bg.opacity);
+        roundedRect(ctx, left, top, w, h, bg.radius);
+        ctx.fill();
+    }
+
+    // Stroke
+    if (stroke && strokeWidth > 0) {
+        ctx.lineWidth = strokeWidth * 2; // make stroke more visible around glyphs
+        ctx.strokeStyle = stroke;
+        ctx.strokeText(text, x, y);
+    }
+
+    // Fill
+    ctx.fillStyle = fill;
+    ctx.fillText(text, x, y);
+
+    // Underline (approximate)
+    if (underline) {
+        const underlineY = y + lineH * 0.35;
+        const startX = center ? x - textW / 2 : x;
+        const endX = center ? x + textW / 2 : x + textW;
+        ctx.lineWidth = Math.max(1, fontSize * 0.07);
+        ctx.beginPath();
+        ctx.moveTo(startX, underlineY);
+        ctx.lineTo(endX, underlineY);
+        ctx.strokeStyle = fill;
+        ctx.stroke();
+    }
+
+    ctx.restore();
+}
+
+function isActiveForTime(tSec: number, start?: string, end?: string) {
+    if (!start && !end) return true;
+    const s = start ? srtToSeconds(start) : -Infinity;
+    const e = end ? srtToSeconds(end) : Infinity;
+    return tSec >= s && tSec <= e;
+}
+
+// ================== Frame Pipeline ==================
+async function extractFrames(input: string, outDir: string): Promise<{ count: number }> {
+    // We do a straight decode to PNGs, no -vf filters.
+    // Naming: frame_%06d.png
+    await new Promise<void>((resolve, reject) => {
+        const args = [
+            "-y",
+            "-i", input,
+            path.join(outDir, "frame_%06d.png"),
+        ];
+        const p = spawn(ffmpegStatic as string, args);
+        p.on("error", reject);
+        p.on("close", (code) => code === 0 ? resolve() : reject(new Error("ffmpeg extract failed")));
+    });
+
+    const count = fs.readdirSync(outDir).filter(f => f.endsWith(".png")).length;
+    return { count };
+}
+
+async function encodeFromFrames(params: {
+    framesDir: string;
+    fps: number;
+    outPath: string;
+    srcVideo: string;
+    bgMusic?: { path: string; volume: number };
+}) {
+    const { framesDir, fps, outPath, srcVideo, bgMusic } = params;
+
+    const args = [
+        "-y",
+        "-framerate", String(fps),
+        "-i", path.join(framesDir, "frame_%06d.png"), // video
+        "-i", srcVideo,                               // original audio
+    ];
+
+    if (bgMusic) {
+        args.push("-i", bgMusic.path); // bg audio
+    }
+
+    // Video codec
+    args.push("-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "medium", "-crf", "18");
+
+    if (bgMusic) {
+        args.push(
+            "-filter_complex",
+            `[2:a]volume=${bgMusic.volume || 1}[bg];[1:a][bg]amix=inputs=2:dropout_transition=0:normalize=0[aout]`,
+            "-map", "0:v:0", // our PNG video
+            "-map", "[aout]", // mixed audio
+            "-c:a", "aac",
+            "-shortest"
+        );
+    } else {
+        args.push(
+            "-map", "0:v:0", // our PNG video
+            "-map", "1:a:0?", // original audio
+            "-c:a", "aac",
+            "-shortest"
+        );
+    }
+
+    args.push(outPath);
+
+    await new Promise<void>((resolve, reject) => {
+        const p = spawn(ffmpegStatic as string, args);
+        p.on("error", reject);
+        p.stderr.on("data", d => console.log("[ffmpeg]", d.toString())); // 👈 log errors
+        p.on("close", (code) => code === 0 ? resolve() : reject(new Error("ffmpeg encode failed")));
+    });
+}
+
+// ================== Main Render ==================
+async function renderWithSkia(
+    event: IpcMainInvokeEvent,
+    payload: RenderPayload
+): Promise<string> {
+    console.log("[skia] Render requested for:", payload.filePath);
+
+    const {
+        filePath,
+        subtitles,
+        subtitleStyle,
+        customTexts,
+        fonts,
+        bgMusic,
+        videoDimensions,
+    } = payload;
+
+    console.log("[skia] Subtitles count:", subtitles.length);
+    console.log("[skia] Custom texts count:", customTexts.length);
+    console.log("[skia] Fonts passed:", fonts.map(f => f.name));
+    if (bgMusic) console.log("[skia] Background music enabled:", bgMusic.path);
+
+    applyFontRegistration(fonts);
+
+    console.log("[skia] Probing video metadata...");
+    const meta = await probe(filePath);
+    console.log("[skia] Probe result:", meta);
+
+    const width = videoDimensions?.width || meta.width;
+    const height = videoDimensions?.height || meta.height;
+    const fps = meta.fps || 30;
+    const duration = meta.duration || 0;
+
+    console.log(`[skia] Video width=${width}, height=${height}, fps=${fps}, duration=${duration}s`);
+
+    // Workspace
+    const baseDir = path.join(app.getPath("userData"), "renders", `${Date.now()}`);
+    const rawFramesDir = path.join(baseDir, "raw_frames");
+    const outFramesDir = path.join(baseDir, "out_frames");
+    ensureDir(rawFramesDir);
+    ensureDir(outFramesDir);
+
+    console.log("[skia] Extracting frames...");
+    await extractFrames(filePath, rawFramesDir);
+    console.log("[skia] Frame extraction done");
+
+    const frameFiles = fs
+        .readdirSync(rawFramesDir)
+        .filter(f => f.endsWith(".png"))
+        .sort();
+
+    console.log("[skia] Total frames to process:", frameFiles.length);
+
+    const total = frameFiles.length;
+    let processed = 0;
+
+    // Canvas reused for speed
+    const canvas = new Canvas(width, height);
+    const ctx = canvas.getContext("2d") as any;
+
+    // 🔹 Draw per-frame with sequential naming
+    for (let i = 0; i < frameFiles.length; i++) {
+        const srcFrame = frameFiles[i];
+        const frameIdx = i; // 0-based
+        const tSec = frameIdx / fps;
+
+        // Load source frame
+        const img = await loadImage(path.join(rawFramesDir, srcFrame));
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Active subtitle(s) for this timestamp
+        const actSubs = subtitles.filter(s => {
+            const start = srtToSeconds(s.start);
+            const end = srtToSeconds(s.end);
+            return tSec >= start && tSec <= end;
+        });
+
+        // Draw subtitles
+        for (const s of actSubs) {
+            drawTextWithStyle(ctx, s.text, subtitleStyle.x, subtitleStyle.y, width, height, {
+                fontFamily: subtitleStyle.fontFamily,
+                fontSize: subtitleStyle.fontSize,
+                fill: subtitleStyle.fontColor,
+                stroke: subtitleStyle.strokeColor,
+                strokeWidth: subtitleStyle.strokeWidth,
+                opacity: subtitleStyle.opacity,
+                bold: subtitleStyle.bold,
+                italic: subtitleStyle.italic,
+                underline: subtitleStyle.underline,
+                bg: {
+                    enabled: subtitleStyle.backgroundEnabled,
+                    color: subtitleStyle.backgroundColor,
+                    opacity: subtitleStyle.backgroundOpacity,
+                    radius: subtitleStyle.backgroundRadius,
+                    padding: subtitleStyle.backgroundPadding,
+                },
+                center: true,
             });
         }
+
+        // Draw custom texts
+        for (const t of customTexts) {
+            if (!isActiveForTime(tSec, t.start, t.end)) continue;
+            drawTextWithStyle(ctx, t.text, t.x, t.y, width, height, {
+                fontFamily: t.fontFamily,
+                fontSize: t.fontSize,
+                fill: t.fontColor,
+                stroke: t.strokeColor,
+                strokeWidth: t.strokeWidth,
+                opacity: t.opacity ?? 100,
+                bold: t.bold,
+                italic: t.italic,
+                underline: t.underline,
+                bg: { enabled: false, color: "#000000", opacity: 0, radius: 0, padding: 0 },
+                center: true,
+            });
+        }
+
+        // 🔹 Save with sequential naming
+        const outName = `frame_${String(i + 1).padStart(6, "0")}.png`;
+        const outPng = path.join(outFramesDir, outName);
+        await fs.promises.writeFile(outPng, await canvas.toBuffer("png"));
+
+        processed++;
+        if (processed % 50 === 0 || processed === total) {
+            console.log(`[skia] Processed ${processed}/${total} frames`);
+        }
+        if (processed % 5 === 0 || processed === total) {
+            const percent = Math.round((processed / total) * 100);
+            event.sender.send("skia:progress", { frame: processed, total, percent });
+        }
     }
+
+    // 🔹 Verify frames written
+    const outList = fs.readdirSync(outFramesDir).filter(f => f.endsWith(".png"));
+    console.log("[skia] Out frames written:", outList.length);
+
+    // Encode video
+    console.log("[skia] All frames rendered, starting encoding...");
+    const outPath = path.join(baseDir, "output.mp4");
+    await encodeFromFrames({
+        framesDir: outFramesDir,
+        fps,
+        outPath,
+        srcVideo: filePath,
+        bgMusic,
+    });
+    console.log("[skia] Encoding finished:", outPath);
+
+    // Cleanup heavy intermediates
+    rmrf(rawFramesDir);
+    rmrf(outFramesDir);
+    console.log("[skia] Cleanup done");
+
+    // Notify UI
+    event.sender.send("skia:done", { outPath });
+    console.log("[skia] Render complete. Output at:", outPath);
+
+    return outPath;
 }
 
-/** Register fonts for skia-canvas (overlay PNG rendering only). */
-function safeRegisterFontsForSkia(fonts: { name: string; path: string }[]) {
-    if (!fonts?.length) return;
-    for (const f of fonts) {
-        if (!f?.path) continue;
+// ================== IPC Registration ==================
+export function registerSkiaHandlers() {
+    ipcMain.handle("skia:render", async (event, payload: RenderPayload) => {
         try {
-            FontLibrary.use({ [f.name]: f.path });
+            const out = await renderWithSkia(event, payload);
+            return out;
         } catch (err) {
-            // non-fatal; fallback to system font
-            console.warn(`[Skia] Failed to register font ${f.name} @ ${f.path}`, err);
+            console.error("[skia] render failed:", err);
+            // still notify renderer to stop spinners
+            event.sender.send("skia:done", { outPath: undefined });
+            throw err;
         }
-    }
-}
-
-/** Escape text for ASS (basic). */
-function escapeAssText(s: string) {
-    return s.replace(/\{/g, "(").replace(/\}/g, ")").replace(/\n/g, "\\N");
-}
-
-/** Convert file path to single-quoted POSIX-ish for ffmpeg filters. */
-function toPosix(p: string) {
-    return p.replace(/\\/g, "/").replace(/'/g, "\\'");
-}
-
-async function renderStaticCustomOverlayPNG(
-    texts: CustomText[],
-    size: { width: number; height: number },
-    outPng: string
-) {
-    const canvas = new Canvas(size.width, size.height);
-    const ctx = canvas.getContext("2d");
-
-    ctx.clearRect(0, 0, size.width, size.height);
-
-    for (const t of texts) {
-        const weight = t.bold ? "bold" : "normal";
-        const style = t.italic ? "italic" : "normal";
-        ctx.font = `${style} ${weight} ${t.fontSize}px ${t.fontFamily}`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.globalAlpha = (t.opacity ?? 100) / 100;
-
-        const px = (size.width * t.x) / 100;
-        const py = (size.height * t.y) / 100;
-
-        if ((t.strokeWidth ?? 0) > 0) {
-            ctx.lineWidth = t.strokeWidth ?? 0;
-            ctx.strokeStyle = t.strokeColor ?? "#000";
-            ctx.strokeText(t.text, px, py);
-        }
-
-        ctx.fillStyle = t.fontColor ?? "#fff";
-        ctx.fillText(t.text, px, py);
-
-        if (t.underline) {
-            const metrics = ctx.measureText(t.text);
-            const uy = py + t.fontSize * 0.15;
-            ctx.beginPath();
-            ctx.moveTo(px - metrics.width / 2, uy);
-            ctx.lineTo(px + metrics.width / 2, uy);
-            ctx.lineWidth = Math.max(1, t.strokeWidth ?? 1);
-            ctx.strokeStyle = t.fontColor ?? "#fff";
-            ctx.stroke();
-        }
-    }
-
-    const buf = await canvas.png;
-    await fs.writeFile(outPng, buf);
+    });
 }

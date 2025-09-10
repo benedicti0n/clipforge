@@ -77,8 +77,6 @@ export function registerClipHandlers() {
                         outPath,
                     ];
 
-                console.log("ffmpeg generate:", args.join(" "));
-
                 await new Promise<void>((resolve, reject) => {
                     const ff = spawn("ffmpeg", args);
                     ff.on("close", (code) =>
