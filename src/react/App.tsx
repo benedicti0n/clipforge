@@ -15,7 +15,8 @@ function App() {
   const [activeTab, setActiveTab] = useState("upload");
 
   useEffect(() => {
-    document.documentElement.className = theme;
+    document.documentElement.classList.remove("light", "dark");
+    document.documentElement.classList.add(theme);
   }, [theme]);
 
   return (
