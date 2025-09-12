@@ -6,6 +6,8 @@ import * as fs from "fs/promises";
 import { clipOutputPath } from "../helpers/paths.js";
 import { runFFmpeg, ffmpegTimeToSeconds } from "../helpers/ffmpeg.js";
 import { ensureClipsDir, hexToAssColor, buildCustomDrawtext } from "../helpers/clip.js";
+import { ffmpeg as ffmpegBin } from "../helpers/resolveBinary.js"; // ✅ import resolved ffmpeg
+
 
 // -------------------- Types --------------------
 interface SubtitleEntry {
@@ -78,7 +80,7 @@ export function registerClipHandlers() {
                     ];
 
                 await new Promise<void>((resolve, reject) => {
-                    const ff = spawn("ffmpeg", args);
+                    const ff = spawn(ffmpegBin, args);
                     ff.on("close", (code) =>
                         code === 0 ? (results.push({ index, filePath: outPath }), resolve()) : reject(new Error(`ffmpeg exited ${code}`))
                     );
@@ -128,7 +130,7 @@ export function registerClipHandlers() {
             console.log("ffmpeg trim:", args.join(" "));
 
             return new Promise<string>((resolve, reject) => {
-                const ff = spawn("ffmpeg", args);
+                const ff = spawn(ffmpegBin, args);
                 ff.stderr.on("data", (chunk) => console.log("ffmpeg:", chunk.toString()));
                 ff.on("close", (code) => (code === 0 ? resolve(outPath) : reject(new Error(`ffmpeg exited ${code}`))));
             });

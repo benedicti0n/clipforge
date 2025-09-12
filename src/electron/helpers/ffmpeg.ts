@@ -1,3 +1,4 @@
+// src/electron/helpers/ffmpeg.ts
 import { spawn } from "child_process";
 import { resolveBinaryPath, tmpPath } from "../util.js";
 
@@ -24,14 +25,17 @@ export async function extractAudioToWav(videoPath: string) {
 }
 
 export function runFFmpeg(args: string[]): Promise<void> {
+    const ffmpegBin = resolveBinaryPath("ffmpeg"); // ✅ use resolved binary
     return new Promise((resolve, reject) => {
-        console.log("Running ffmpeg:", args.join(" "));
-        const ff = spawn("ffmpeg", args);
+        console.log("Running ffmpeg:", [ffmpegBin, ...args].join(" "));
+        const ff = spawn(ffmpegBin, args);
+
         ff.stderr.on("data", (d) => console.log(`ffmpeg: ${d}`));
-        ff.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`))));
+        ff.on("close", (code) =>
+            code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`))
+        );
     });
 }
-
 
 // Simple time-to-seconds helper
 export function toSeconds(srtTime: string): number {
