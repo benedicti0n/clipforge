@@ -5,16 +5,18 @@
     "dist-electron",
     "dist-react"
   ],
+  "asar": true,
   "extraResources": [
     "dist-electron/preload.cjs",
     "src/assets/**",
-    { "from": "public/bin", "to": "bin" },
     "assets/fonts/**"
   ],
+  "afterPack": "scripts/afterPack.js",
   "icon": "./desktopIcon.png",
   "mac": {
     "target": ["dmg", "zip"],
-    "category": "public.app-category.video"
+    "category": "public.app-category.video",
+    "hardenedRuntime": true
   },
   "dmg": {
     "background": "build/background.png",

@@ -80,9 +80,23 @@ export function registerClipHandlers() {
                     ];
 
                 await new Promise<void>((resolve, reject) => {
-                    const ff = spawn(ffmpegBin, args);
-                    ff.on("close", (code) =>
-                        code === 0 ? (results.push({ index, filePath: outPath }), resolve()) : reject(new Error(`ffmpeg exited ${code}`))
+                    const ff = spawn(ffmpegBin, args, { stdio: ["ignore", "pipe", "pipe"] });
+
+                    let stderr = "";
+                    ff.stderr?.on("data", (buf) => { stderr += buf.toString(); });
+
+                    ff.on("error", (err) => {
+                        reject(new Error(`ffmpeg spawn error: ${err.message}; bin=${ffmpegBin}`));
+                    });
+
+                    ff.on("close", (code, signal) =>
+                        code === 0
+                            ? (results.push({ index, filePath: outPath }), resolve())
+                            : reject(new Error(
+                                `ffmpeg exited ${code ?? "null"}${signal ? ` (signal ${signal})` : ""}\n` +
+                                `bin=${ffmpegBin}\nargs=${JSON.stringify(args)}\n` +
+                                `stderr:\n${stderr}`
+                            ))
                     );
                 });
             }

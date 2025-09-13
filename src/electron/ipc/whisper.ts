@@ -1,19 +1,16 @@
 import { ipcMain, IpcMainInvokeEvent } from "electron";
-import path from "path";
-import fs from "fs/promises";
+import path from "node:path";
+import fs from "node:fs/promises";
 import { ensureDir, fileExists, readText, downloadWithProgress } from "../util.js";
 import { WHISPER_MODEL_FILES, WhisperModelKey } from "../constants/whisper.js";
 import { modelsDir, transcriptsDir } from "../helpers/paths.js";
 import { extractAudioToWav } from "../helpers/ffmpeg.js";
 import { runWhisper } from "../helpers/whisper.js";
-import { ChildProcess } from "child_process";
+import { ChildProcess } from "node:child_process";
 
 let activeWhisperProcess: ChildProcess | null = null;
 
-
-//
-// 🔹 Track active downloads in main
-//
+// Track active downloads
 const activeDownloads = new Set<WhisperModelKey>();
 
 export function registerWhisperHandlers() {
@@ -40,31 +37,23 @@ export function registerWhisperHandlers() {
         activeDownloads.add(modelKey);
 
         try {
-            // Local copy (from ./public/models)
+            // Prefer local copy (public/models) if present
             const localPath = path.join(process.cwd(), "public", "models", entry.filename);
-            const fsSync = await import("fs");
+            const fsSync = await import("node:fs");
             if (fsSync.existsSync(localPath)) {
                 fsSync.copyFileSync(localPath, dest);
-
                 e.sender.send("whisper:download:progress", { model: modelKey, percent: 100 });
                 return true;
             }
 
             // Remote download
-            if (entry.url.startsWith("http")) {
+            if (entry.url?.startsWith("http")) {
                 e.sender.send("whisper:download:progress", { model: modelKey, percent: 0 });
-
                 await downloadWithProgress(entry.url, dest, (percent) => {
                     try {
-                        e.sender.send("whisper:download:progress", {
-                            model: modelKey,
-                            percent,
-                        });
-                    } catch (err) {
-                        console.error("Failed to send progress to renderer", err);
-                    }
+                        e.sender.send("whisper:download:progress", { model: modelKey, percent });
+                    } catch { }
                 });
-
                 e.sender.send("whisper:download:progress", { model: modelKey, percent: 100 });
                 return true;
             }
@@ -79,23 +68,36 @@ export function registerWhisperHandlers() {
         if (!videoPath) throw new Error("videoPath not provided");
 
         const entry = WHISPER_MODEL_FILES[model];
+        if (!entry) throw new Error(`Unknown Whisper model key: ${model}`);
+
         const modelPath = path.join(modelsDir(), entry.filename);
 
-        const wavPath = await extractAudioToWav(videoPath);
-        const baseName = path.parse(videoPath).name + "-" + Date.now().toString(36);
+        const baseName = `${path.parse(videoPath).name}-${Date.now().toString(36)}`;
+        const outBase = path.join(transcriptsDir(), baseName);
+        const wavPath = `${outBase}.wav`;
 
-        // runWhisper should return process + output paths
-        const out = await runWhisper(modelPath, wavPath, baseName, e.sender, (proc) => {
-            activeWhisperProcess = proc;
-        });
+        try {
+            // 1) Extract WAV (16k mono) for whisper
+            await extractAudioToWav(videoPath, wavPath);
 
-        activeWhisperProcess = null; // reset after done
+            // 2) Run whisper CLI (emits outBase.txt / outBase.srt)
+            const out = await runWhisper(modelPath, wavPath, baseName, e.sender, (proc) => {
+                activeWhisperProcess = proc;
+            });
 
-        const full = (await fileExists(out.txt)) ? await readText(out.txt) : "";
-        const preview = full.slice(0, 1200) + (full.length > 1200 ? "\n..." : "");
-        const srt = (await fileExists(out.srt)) ? await readText(out.srt) : "";
+            activeWhisperProcess = null;
 
-        return { transcriptPath: out.srt, preview, full, srt };
+            // 3) Read results if present
+            const full = (await fileExists(out.txt)) ? await readText(out.txt) : "";
+            const srt = (await fileExists(out.srt)) ? await readText(out.srt) : "";
+            const preview = full.slice(0, 1200) + (full.length > 1200 ? "\n..." : "");
+
+            return { transcriptPath: out.srt, preview, full, srt };
+        } catch (err) {
+            activeWhisperProcess = null;
+            e.sender.send("whisper:log", String((err as any)?.message || err));
+            throw err;
+        }
     });
 
     ipcMain.handle("whisper:stop", async () => {
@@ -114,16 +116,13 @@ export function registerWhisperHandlers() {
     ipcMain.handle("whisper:deleteModel", async (_e, modelKey: WhisperModelKey) => {
         const entry = WHISPER_MODEL_FILES[modelKey];
         if (!entry) throw new Error(`Unknown model: ${modelKey}`);
-
         const modelPath = path.join(modelsDir(), entry.filename);
 
         try {
             await fs.unlink(modelPath);
             return { success: true };
         } catch (err: any) {
-            if (err.code === "ENOENT") {
-                return { success: false, message: "Model file not found" };
-            }
+            if (err.code === "ENOENT") return { success: false, message: "Model file not found" };
             throw err;
         }
     });
@@ -138,10 +137,5 @@ export function registerWhisperHandlers() {
         return result;
     });
 
-    //
-    // 🔹 New: allow renderer to resync active downloads after reload
-    //
-    ipcMain.handle("whisper:activeDownloads", () => {
-        return Array.from(activeDownloads);
-    });
+    ipcMain.handle("whisper:activeDownloads", () => Array.from(activeDownloads));
 }
