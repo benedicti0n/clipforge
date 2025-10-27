@@ -22,7 +22,6 @@ function ensureExec(p: string) {
 }
 function versionStatus(p: string): number | null {
     const r = spawnSync(p, ["-version"], { stdio: ["ignore", "ignore", "ignore"] });
-    // If r.error exists → can’t spawn → return null
     return (r && typeof r.status === "number") ? r.status : null;
 }
 function usable(p?: string): string | "" {
@@ -42,6 +41,19 @@ function firstUsable(candidates: string[], label: string): string {
     }
     return "";
 }
+// NEW: for whisper-cli (don’t require -version)
+function firstExecutable(candidates: string[], label: string): string {
+    if (process.env.FFMPEG_LOG_CANDIDATES === "1") {
+        console.log(`[bin:candidates:${label}]`, candidates);
+    }
+    for (const c of candidates) {
+        if (!c) continue;
+        if (!existsX(c)) continue;
+        ensureExec(c);
+        return c;
+    }
+    return "";
+}
 
 function resourcesBin(name: string) {
     return path.join(process.resourcesPath ?? "", "bin", name);
@@ -57,58 +69,34 @@ function nmFfprobe(): string {
     return typeof raw === "string" ? raw : raw?.path || "";
 }
 
-// Allow overrides
+// env overrides
 const ENV_FFMPEG = process.env.FFMPEG_PATH || "";
 const ENV_FFPROBE = process.env.FFPROBE_PATH || "";
 const ENV_WHISPER = process.env.WHISPER_CLI_PATH || "";
 
-// Dev and packaged have different priority orders
+// ffmpeg: prefer resources/bin → npm static → Homebrew → public/bin
 function pickFfmpeg() {
     const candidates = app.isPackaged
-        ? [
-            ENV_FFMPEG,
-            resourcesBin(ffmpegName),
-            nmFfmpeg(),                   // works well on Apple Silicon
-            "/opt/homebrew/bin/ffmpeg",
-            "/usr/local/bin/ffmpeg",
-            projectBin(ffmpegName),       // your local file if it’s good
-        ]
-        : [
-            ENV_FFMPEG,
-            nmFfmpeg(),                   // dev → prefer ffmpeg-static
-            "/opt/homebrew/bin/ffmpeg",
-            "/usr/local/bin/ffmpeg",
-            projectBin(ffmpegName),
-        ];
+        ? [ENV_FFMPEG, resourcesBin(ffmpegName), nmFfmpeg(), "/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", projectBin(ffmpegName)]
+        : [ENV_FFMPEG, nmFfmpeg(), "/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", projectBin(ffmpegName)];
     return firstUsable(candidates.filter(Boolean), "ffmpeg");
 }
 
+// ffprobe: similar
 function pickFfprobe() {
-    const nm = nmFfprobe();            // may be wrong arch or missing
+    const nm = nmFfprobe();
     const candidates = app.isPackaged
-        ? [
-            ENV_FFPROBE,
-            resourcesBin(ffprobeName),
-            nm,
-            "/opt/homebrew/bin/ffprobe",
-            "/usr/local/bin/ffprobe",
-            projectBin(ffprobeName),
-        ]
-        : [
-            ENV_FFPROBE,
-            nm,
-            "/opt/homebrew/bin/ffprobe",
-            "/usr/local/bin/ffprobe",
-            projectBin(ffprobeName),
-        ];
+        ? [ENV_FFPROBE, resourcesBin(ffprobeName), nm, "/opt/homebrew/bin/ffprobe", "/usr/local/bin/ffprobe", projectBin(ffprobeName)]
+        : [ENV_FFPROBE, nm, "/opt/homebrew/bin/ffprobe", "/usr/local/bin/ffprobe", projectBin(ffprobeName)];
     return firstUsable(candidates.filter(Boolean), "ffprobe");
 }
 
+// whisper-cli: exists & executable is enough
 function pickWhisperCli() {
     const candidates = app.isPackaged
         ? [ENV_WHISPER, resourcesBin(whisperName), projectBin(whisperName)]
         : [ENV_WHISPER, projectBin(whisperName)];
-    return firstUsable(candidates.filter(Boolean), "whisper-cli");
+    return firstExecutable(candidates.filter(Boolean), "whisper-cli");
 }
 
 export const ffmpeg = pickFfmpeg();
@@ -121,4 +109,5 @@ export function logBinaryPaths(prefix = "[boot]") {
     console.log(`${prefix} whisper-cli: ${whisperCli || "(not found)"}`);
     console.log(`${prefix} ffmpeg -version:`, ffmpeg ? versionStatus(ffmpeg) : "(n/a)");
     console.log(`${prefix} ffprobe -version:`, ffprobe ? versionStatus(ffprobe) : "(n/a)");
+    // don’t run -version on whisper-cli (many builds don’t have it)
 }
