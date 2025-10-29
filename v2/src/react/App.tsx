@@ -1,19 +1,13 @@
-import { Button } from "./components/ui/button"
-import { useThemeStore } from "./store/themeStore";
-import { useEffect } from "react";
+// src/react/App.tsx
+"use client";
 
-function App() {
-  const { theme, toggleTheme } = useThemeStore();
+import React from "react";
+import { ThemeSelector } from "./components/ui/ThemeSelector";
 
-  useEffect(() => {
-    document.documentElement.className = theme;
-  }, [theme]);
-
+export default function App() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Button onClick={toggleTheme}>Toggle Theme ({theme})</Button>
+    <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
+      <ThemeSelector />
     </div>
-  )
+  );
 }
-
-export default App
