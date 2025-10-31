@@ -1,25 +1,21 @@
 "use client";
 
 import * as React from "react";
-import {
-    Tabs,
-    TabsList,
-    TabsTrigger,
-    TabsContent,
-} from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import Upload from "../Tabs/Upload";
 
 export function AppTabs() {
     const [activeTab, setActiveTab] = React.useState("upload");
 
     return (
-        <div className="w-full">
-            {/* Tabs Header */}
+        <div className="w-full h-full flex flex-col">
             <Tabs
                 value={activeTab}
                 onValueChange={setActiveTab}
-                className="w-full"
+                className="flex flex-col flex-1 min-h-0"
             >
-                <TabsList className="w-full justify-center">
+                {/* Header shouldn't grow */}
+                <TabsList className="w-full justify-center shrink-0">
                     <TabsTrigger
                         value="upload"
                         className="data-[state=active]:border data-[state=active]:border-primary px-4 py-2 font-medium"
@@ -46,25 +42,31 @@ export function AppTabs() {
                     </TabsTrigger>
                 </TabsList>
 
-                {/* Tabs Content */}
-                <div className="w-full">
-                    <TabsContent value="upload">
-                        <p className="text-sm text-muted-foreground">Upload your video file here to start processing.</p>
+                {/* Content wrapper should grow */}
+                <div className="w-full flex-1 min-h-0">
+                    <TabsContent value="upload" className="h-full">
+                        <Upload />
                     </TabsContent>
 
-                    <TabsContent value="transcription">
-                        <p className="text-sm text-muted-foreground">Generated transcription text will appear here.</p>
+                    <TabsContent value="transcription" className="h-full">
+                        <p className="text-sm text-muted-foreground">
+                            Generated transcription text will appear here.
+                        </p>
                     </TabsContent>
 
-                    <TabsContent value="clips-json">
-                        <p className="text-sm text-muted-foreground">View and edit extracted clips JSON here.</p>
+                    <TabsContent value="clips-json" className="h-full">
+                        <p className="text-sm text-muted-foreground">
+                            View and edit extracted clips JSON here.
+                        </p>
                     </TabsContent>
 
-                    <TabsContent value="clips-generation">
-                        <p className="text-sm text-muted-foreground">Final clip generation and export options.</p>
+                    <TabsContent value="clips-generation" className="h-full">
+                        <p className="text-sm text-muted-foreground">
+                            Final clip generation and export options.
+                        </p>
                     </TabsContent>
                 </div>
-            </Tabs >
-        </div >
+            </Tabs>
+        </div>
     );
 }

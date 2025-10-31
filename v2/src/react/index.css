@@ -17,3 +17,17 @@
 @import "./themes/vintage-paper.css";
 
 @custom-variant dark (&:is(.dark *));
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+.drop-zone {
+  transition: all 0.25s ease;
+}
+.drop-zone:hover {
+  border-color: hsl(var(--primary));
+  background-color: hsl(var(--accent) / 0.1);
+}
