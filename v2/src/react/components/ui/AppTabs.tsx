@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import Upload from "../Tabs/Upload";
+import Transcription from "../Tabs/Transcription";
 
 export function AppTabs() {
     const [activeTab, setActiveTab] = React.useState("upload");
@@ -49,9 +50,7 @@ export function AppTabs() {
                     </TabsContent>
 
                     <TabsContent value="transcription" className="h-full">
-                        <p className="text-sm text-muted-foreground">
-                            Generated transcription text will appear here.
-                        </p>
+                        <Transcription />
                     </TabsContent>
 
                     <TabsContent value="clips-json" className="h-full">

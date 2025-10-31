@@ -1,13 +1,9 @@
-import { app, BrowserWindow } from "electron";
-import path from "path";
-import { isDev } from "./util.js";
+//electron/main.ts
+import { app } from "electron";
+import { createMainWindow } from "./window.js";
+import { registerIpcHandlers } from "./ipcHandlers/index.js";
 
-app.on('ready', () => {
-    const mainWindow = new BrowserWindow()
-
-    if (isDev()) {
-        mainWindow.loadURL('http://localhost:5172')
-    } else {
-        mainWindow.loadFile(path.join(app.getAppPath(), "/dist-react/index.html"))
-    }
-})
+app.whenReady().then(async () => {
+    createMainWindow();
+    registerIpcHandlers();
+});
