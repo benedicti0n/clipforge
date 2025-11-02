@@ -14,6 +14,7 @@ interface WhisperState {
     downloadModel: (model: WhisperModelKey) => Promise<void>;
     deleteModel: (model: WhisperModelKey) => Promise<void>;
     setProgress: (value: number) => void;
+    loadCachedModels: () => Promise<void>;
 }
 
 // Set up progress listener once
@@ -113,6 +114,26 @@ export const useWhisperStore = create<WhisperState>()(
                 } catch (err) {
                     console.error("❌ Delete error:", err);
                     toast.error(`Failed to delete ${model}`);
+                }
+            },
+
+            loadCachedModels: async () => {
+                try {
+                    const files = await window.electronAPI?.listWhisperModels();
+                    if (!files) return;
+
+                    // Map filenames to Whisper model keys
+                    const modelKeys = files
+                        .map((file) => {
+                            const match = file.match(/ggml-(tiny|base|small|medium|large-v2|large-v3)\.(bin|pt)$/i);
+                            return match ? (match[1] as WhisperModelKey) : null;
+                        })
+                        .filter((key): key is WhisperModelKey => !!key);
+
+                    set({ cachedModels: new Set(modelKeys) });
+                    console.log("🧠 Cached models loaded:", modelKeys);
+                } catch (err) {
+                    console.error("❌ Failed to load cached models:", err);
                 }
             },
 

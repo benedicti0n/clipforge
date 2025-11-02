@@ -6,6 +6,7 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Download, CheckCircle2, Loader2, Rabbit, Squirrel, Cat, Dog, Bird, Turtle, Trash2, FolderOpen } from "lucide-react";
 import { Card } from "../ui/card";
+import { useEffect } from "react";
 
 const MODEL_ICONS: Record<WhisperModelKey, JSX.Element> = {
     tiny: <Rabbit className="w-5 h-5" />,
@@ -25,6 +26,7 @@ export default function WhisperModelSelect() {
         downloadModel,
         progress,
         deleteModel,
+        loadCachedModels
     } = useWhisperStore();
 
     const isCached = (key: WhisperModelKey) => cachedModels.has(key);
@@ -40,6 +42,10 @@ export default function WhisperModelSelect() {
         e.stopPropagation();
         deleteModel(modelKey);
     };
+
+    useEffect(() => {
+        loadCachedModels();
+    }, []);
 
     return (
         <div className="flex flex-col gap-4">

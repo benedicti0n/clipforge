@@ -3,6 +3,7 @@ import { registerWhisperModelDownloadHandler } from "./downloadFile.js";
 import { registerSaveFileHandler } from "./saveFile.js";
 import { registerDeleteFileHandler } from "./deleteFile.js";
 import { registerOpenFolderHandler } from "./openFolder.js";
+import { registerListModelsHandler } from "./listModels.js";
 
 export function registerIpcHandlers() {
     console.log("🔌 Registering IPC handlers...");
@@ -10,5 +11,6 @@ export function registerIpcHandlers() {
     registerWhisperModelDownloadHandler();
     registerDeleteFileHandler();
     registerOpenFolderHandler();
+    registerListModelsHandler();
 };
 

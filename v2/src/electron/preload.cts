@@ -4,6 +4,11 @@ console.log("✅ Preload loaded!");
 
 const electronAPI = {
     // ✅ Direct high-level API calls
+    listWhisperModels: () => {
+        console.log("📄 preload → invoking list-whisper-models");
+        return ipcRenderer.invoke("list-whisper-models");
+    },
+
     downloadModel: (url: string, savePath: string) => {
         console.log("🧩 preload → invoking download-model", url, savePath);
         return ipcRenderer.invoke("download-model", { url, savePath });

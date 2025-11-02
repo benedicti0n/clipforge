@@ -1,5 +1,6 @@
 // src/types/electron.d.ts
 export interface ElectronAPI {
+    listWhisperModels: () => Promise<string[]>;
     downloadModel: (url: string, savePath: string) => Promise<boolean>;
     saveFile: (path: string, buffer: Buffer) => Promise<boolean>;
     openWhisperFolder: () => Promise<boolean>;
