@@ -14,6 +14,11 @@ const electronAPI = {
         return ipcRenderer.invoke("save-file", path, buffer);
     },
 
+    openWhisperFolder: () => {
+        console.log("📁 preload → invoking open-whisper-folder");
+        return ipcRenderer.invoke("open-whisper-folder");
+    },
+
     deleteFile: (path: string) => {
         console.log("🗑️ preload → invoking delete-file", path);
         return ipcRenderer.invoke("delete-file", path);

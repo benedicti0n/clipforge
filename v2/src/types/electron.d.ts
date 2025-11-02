@@ -2,6 +2,7 @@
 export interface ElectronAPI {
     downloadModel: (url: string, savePath: string) => Promise<boolean>;
     saveFile: (path: string, buffer: Buffer) => Promise<boolean>;
+    openWhisperFolder: () => Promise<boolean>;
     deleteFile: (path: string) => Promise<boolean>;
     onDownloadProgress: (callback: (progress: number) => void) => void;
 }

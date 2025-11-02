@@ -4,7 +4,7 @@ import { useWhisperStore } from "../../store/whisperStore";
 import { WHISPER_MODELS_META, type WhisperModelKey } from "../../../constants/whisper";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Download, CheckCircle2, Loader2, Rabbit, Squirrel, Cat, Dog, Bird, Turtle, Trash2 } from "lucide-react";
+import { Download, CheckCircle2, Loader2, Rabbit, Squirrel, Cat, Dog, Bird, Turtle, Trash2, FolderOpen } from "lucide-react";
 import { Card } from "../ui/card";
 
 const MODEL_ICONS: Record<WhisperModelKey, JSX.Element> = {
@@ -44,7 +44,16 @@ export default function WhisperModelSelect() {
     return (
         <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-foreground">Whisper Models</label>
+                <label className="text-sm font-medium text-foreground flex items-center gap-2">
+                    Whisper Models
+                    <button
+                        onClick={() => window.electronAPI?.openWhisperFolder()}
+                        className="text-muted-foreground hover:text-primary transition-colors"
+                        title="Open models folder"
+                    >
+                        <FolderOpen className="w-4 h-4" />
+                    </button>
+                </label>
                 {selectedModel && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <CheckCircle2 className="w-4 h-4 text-primary" />
