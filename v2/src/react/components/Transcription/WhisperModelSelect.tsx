@@ -7,6 +7,7 @@ import { Button } from "../ui/button";
 import { Download, CheckCircle2, Loader2, Rabbit, Squirrel, Cat, Dog, Bird, Turtle, Trash2, FolderOpen } from "lucide-react";
 import { Card } from "../ui/card";
 import { useEffect } from "react";
+import { toast } from "sonner";
 
 const MODEL_ICONS: Record<WhisperModelKey, JSX.Element> = {
     tiny: <Rabbit className="w-5 h-5" />,
@@ -18,16 +19,7 @@ const MODEL_ICONS: Record<WhisperModelKey, JSX.Element> = {
 };
 
 export default function WhisperModelSelect() {
-    const {
-        selectedModel,
-        setModel,
-        cachedModels,
-        downloading,
-        downloadModel,
-        progress,
-        deleteModel,
-        loadCachedModels
-    } = useWhisperStore();
+    const { selectedModel, setModel, cachedModels, downloading, downloadModel, progress, deleteModel, loadCachedModels } = useWhisperStore();
 
     const isCached = (key: WhisperModelKey) => cachedModels.has(key);
     const isDownloading = (key: WhisperModelKey) => downloading === key;
@@ -45,6 +37,41 @@ export default function WhisperModelSelect() {
 
     useEffect(() => {
         loadCachedModels();
+    }, []);
+
+    useEffect(() => {
+        // 🔁 Retry event
+        const offRetry = window.electronAPI?.onDownloadRetry?.((attempt) => {
+            toast(`Retrying download...`, {
+                description: `Attempt ${attempt + 1} of 3`,
+                duration: 3000,
+            });
+        });
+
+        // ❌ Failed event
+        const offFailed = window.electronAPI?.onDownloadFailed?.((error) => {
+            toast.error("Download failed", {
+                description:
+                    error || "The model could not be downloaded after 3 attempts.",
+                duration: 5000,
+            });
+        });
+
+        return () => {
+            offRetry?.();
+            offFailed?.();
+        };
+    }, []);
+
+    useEffect(() => {
+        const offSuccess = window.electronAPI?.onDownloadSuccess?.(({ file }) => {
+            const modelName = file.match(/ggml-(.*?)\./)?.[1] || "model";
+            toast.success(`Model “${modelName}” downloaded successfully!`, {
+                duration: 4000,
+            });
+        });
+
+        return () => offSuccess?.();
     }, []);
 
     return (

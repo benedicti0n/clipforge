@@ -42,6 +42,30 @@ const electronAPI = {
             ipcRenderer.removeListener("download-progress", listener);
         };
     },
+
+    onDownloadRetry: (callback: (attempt: number) => void) => {
+        const listener = (_: IpcRendererEvent, data: { attempt: number }) => {
+            callback(data.attempt);
+        };
+        ipcRenderer.on("download-retry", listener);
+        return () => ipcRenderer.removeListener("download-retry", listener);
+    },
+
+    onDownloadFailed: (callback: (error: string) => void) => {
+        const listener = (_: IpcRendererEvent, data: { error: string }) => {
+            callback(data.error);
+        };
+        ipcRenderer.on("download-failed", listener);
+        return () => ipcRenderer.removeListener("download-failed", listener);
+    },
+
+    onDownloadSuccess: (callback: (data: { file: string }) => void) => {
+        const listener = (_: IpcRendererEvent, data: { file: string }) => {
+            callback(data);
+        };
+        ipcRenderer.on("download-success", listener);
+        return () => ipcRenderer.removeListener("download-success", listener);
+    },
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);

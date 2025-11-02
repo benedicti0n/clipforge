@@ -4,6 +4,10 @@ import path from "path";
 import https from "https";
 import http from "http";
 
+/**
+ * Registers the Whisper model download IPC handler.
+ * Handles redirects, retries, timeouts, and sends live progress + status events.
+ */
 export function registerWhisperModelDownloadHandler() {
     console.log("🧠 registerWhisperModelDownloadHandler called");
 
@@ -23,6 +27,7 @@ export function registerWhisperModelDownloadHandler() {
             await downloadWithRedirects(url, absoluteSavePath, event, 5);
 
             console.log("✅ Model downloaded:", absoluteSavePath);
+            event.sender.send("download-success", { file: absoluteSavePath }); // ✅ success event for UI toast
             return true;
         } catch (err) {
             console.error("❌ Download handler failed:", err);
@@ -31,89 +36,92 @@ export function registerWhisperModelDownloadHandler() {
     });
 }
 
+/**
+ * Robust downloader with retry, redirect, and timeout handling.
+ */
 function downloadWithRedirects(
     url: string,
     savePath: string,
     event: Electron.IpcMainInvokeEvent,
-    maxRedirects: number
+    maxRedirects: number,
+    attempt: number = 1
 ): Promise<void> {
     return new Promise((resolve, reject) => {
         if (maxRedirects === 0) {
-            reject(new Error("Too many redirects"));
-            return;
+            return reject(new Error("Too many redirects"));
         }
 
-        const file = fs.createWriteStream(savePath);
+        const tmpPath = savePath + ".part";
         const protocol = url.startsWith("https") ? https : http;
+        const file = fs.createWriteStream(tmpPath);
 
         const request = protocol.get(url, (response) => {
             const statusCode = response.statusCode || 0;
 
-            // Handle redirects (301, 302, 303, 307, 308)
+            // 🔁 Handle redirects
             if (statusCode >= 300 && statusCode < 400 && response.headers.location) {
-                console.log(`↪️  Redirect ${statusCode} to:`, response.headers.location);
                 file.close();
-                fs.unlinkSync(savePath); // Clean up partial file
-
-                // Follow the redirect
+                fs.rmSync(tmpPath, { force: true });
                 const redirectUrl = new URL(response.headers.location, url).href;
-                downloadWithRedirects(redirectUrl, savePath, event, maxRedirects - 1)
-                    .then(resolve)
-                    .catch(reject);
-                return;
+                console.log(`↪️ Redirect (${statusCode}) → ${redirectUrl}`);
+                return resolve(
+                    downloadWithRedirects(redirectUrl, savePath, event, maxRedirects - 1)
+                );
             }
 
-            // Handle non-200 responses
+            // ❌ Non-200 response
             if (statusCode !== 200) {
                 file.close();
-                if (fs.existsSync(savePath)) {
-                    fs.unlinkSync(savePath);
-                }
-                reject(new Error(`HTTP ${statusCode}`));
-                return;
+                fs.rmSync(tmpPath, { force: true });
+                return reject(new Error(`HTTP ${statusCode}`));
             }
 
-            // Track download progress
             const total = parseInt(response.headers["content-length"] || "0", 10);
             let downloaded = 0;
 
+            // 📊 Progress tracking
             response.on("data", (chunk) => {
                 downloaded += chunk.length;
                 const progress = total ? (downloaded / total) * 100 : 0;
                 event.sender.send("download-progress", { progress });
             });
 
+            // 🧩 Pipe response to file
             response.pipe(file);
 
+            // ✅ On finish
             file.on("finish", () => {
                 file.close();
-                resolve();
-            });
-
-            file.on("error", (err) => {
-                file.close();
-                if (fs.existsSync(savePath)) {
-                    fs.unlinkSync(savePath);
+                try {
+                    fs.renameSync(tmpPath, savePath);
+                    console.log("✅ Finished download:", savePath);
+                    resolve();
+                } catch (err) {
+                    reject(err);
                 }
-                reject(err);
             });
         });
 
+        // ⚠️ Error + retry logic
         request.on("error", (err) => {
             file.close();
-            if (fs.existsSync(savePath)) {
-                fs.unlinkSync(savePath);
+            fs.rmSync(tmpPath, { force: true });
+
+            if (attempt < 3) {
+                console.warn(`⚠️ Download failed (${attempt}/3): ${err.message}. Retrying...`);
+                event.sender.send("download-retry", { attempt }); // 🔁 notify UI
+                setTimeout(() => {
+                    resolve(downloadWithRedirects(url, savePath, event, maxRedirects, attempt + 1));
+                }, 3000);
+            } else {
+                event.sender.send("download-failed", { error: err.message }); // ❌ final failure
+                reject(err);
             }
-            reject(err);
         });
 
-        request.setTimeout(30000, () => {
-            request.destroy();
-            file.close();
-            if (fs.existsSync(savePath)) {
-                fs.unlinkSync(savePath);
-            }
-            reject(new Error("Download timeout"));
+        // ⏳ Timeout for large models (2 min per request)
+        request.setTimeout(120000, () => {
+            request.destroy(new Error("Download timeout (120s)"));
         });
     });
 }
