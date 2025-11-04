@@ -130,16 +130,18 @@ export default function WhisperModelSelect() {
                                         {MODEL_ICONS[model.key]}
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <div className="flex items-start justify-between gap-2">
+                                        <div className="flex items-start justify-between gap-2 relative">
                                             <div>
                                                 <p className="font-semibold capitalize">{model.label}</p>
                                                 <p className="text-xs text-muted-foreground">
                                                     {model.sizeMB} MB • {model.note}
                                                 </p>
                                             </div>
-                                            {isSelected && (
-                                                <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0" />
-                                            )}
+                                            <div className="absolute -right-4 -top-4">
+                                                {isSelected && (
+                                                    <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0" />
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -185,6 +187,7 @@ export default function WhisperModelSelect() {
                                                 }}
                                             >
                                                 <X className="w-4 h-4" />
+                                                Cancel
                                             </Button>
                                         </div>
                                     ) : (
