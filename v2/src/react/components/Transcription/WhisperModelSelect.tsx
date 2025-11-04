@@ -1,10 +1,10 @@
 "use client";
 
 import { useWhisperStore } from "../../store/whisperStore";
-import { WHISPER_MODELS_META, type WhisperModelKey } from "../../../constants/whisper";
+import { WHISPER_MODEL_FILES, WHISPER_MODELS_META, type WhisperModelKey } from "../../../constants/whisper";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Download, CheckCircle2, Loader2, Rabbit, Squirrel, Cat, Dog, Bird, Turtle, Trash2, FolderOpen } from "lucide-react";
+import { Download, CheckCircle2, Loader2, Rabbit, Squirrel, Cat, Dog, Bird, Turtle, Trash2, FolderOpen, X } from "lucide-react";
 import { Card } from "../ui/card";
 import { useEffect } from "react";
 import { toast } from "sonner";
@@ -19,7 +19,7 @@ const MODEL_ICONS: Record<WhisperModelKey, JSX.Element> = {
 };
 
 export default function WhisperModelSelect() {
-    const { selectedModel, setModel, cachedModels, downloading, downloadModel, progress, deleteModel, loadCachedModels } = useWhisperStore();
+    const { selectedModel, setModel, cachedModels, downloading, downloadModel, progress, deleteModel, loadCachedModels, globalDownloading } = useWhisperStore();
 
     const isCached = (key: WhisperModelKey) => cachedModels.has(key);
     const isDownloading = (key: WhisperModelKey) => downloading === key;
@@ -72,6 +72,14 @@ export default function WhisperModelSelect() {
         });
 
         return () => offSuccess?.();
+    }, []);
+
+    useEffect(() => {
+        const offCanceled = window.electronAPI?.onDownloadCanceled?.(({ file }) => {
+            const name = file.match(/ggml-(.*?)\./)?.[1] || "model";
+            toast.warning(`Canceled download of “${name}”`, { duration: 3000 });
+        });
+        return () => offCanceled?.();
     }, []);
 
     return (
@@ -168,6 +176,16 @@ export default function WhisperModelSelect() {
                                                     style={{ width: `${progress}%` }}
                                                 />
                                             </div>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    window.electronAPI?.cancelDownload(WHISPER_MODEL_FILES[model.key].filename);
+                                                }}
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </Button>
                                         </div>
                                     ) : (
                                         <Button
@@ -175,9 +193,17 @@ export default function WhisperModelSelect() {
                                             size="sm"
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                console.log("🔽 Download clicked for:", model.key);
-                                                downloadModel(model.key);
+                                                if (!globalDownloading) {
+                                                    console.log("🔽 Download clicked for:", model.key);
+                                                    downloadModel(model.key);
+                                                } else {
+                                                    toast.warning("Another download is already in progress", {
+                                                        description: "Please wait or cancel the current download first.",
+                                                        duration: 4000,
+                                                    });
+                                                }
                                             }}
+                                            disabled={globalDownloading && !isDownloading(model.key)} // 👈 disables all other buttons
                                             className="gap-2 w-full"
                                         >
                                             <Download className="w-4 h-4" />

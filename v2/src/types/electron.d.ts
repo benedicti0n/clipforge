@@ -9,6 +9,9 @@ export interface ElectronAPI {
     openWhisperFolder: () => Promise<boolean>;
     listWhisperModels: () => Promise<string[]>;
     onDownloadSuccess: (callback: (data: { file: string }) => void) => void;
+    cancelDownload: (filename: string) => Promise<boolean>;
+    onDownloadCanceled: (callback: (data: { file: string }) => void) => void;
+    onDownloadBlocked: (callback: (data: { reason: string }) => void) => void;
 }
 
 declare global {

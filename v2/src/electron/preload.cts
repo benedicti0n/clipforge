@@ -66,6 +66,19 @@ const electronAPI = {
         ipcRenderer.on("download-success", listener);
         return () => ipcRenderer.removeListener("download-success", listener);
     },
+
+    cancelDownload: (filename: string) => ipcRenderer.invoke("cancel-download", filename),
+    onDownloadCanceled: (callback: (data: { file: string }) => void) => {
+        const listener = (_: IpcRendererEvent, data: { file: string }) => callback(data);
+        ipcRenderer.on("download-canceled", listener);
+        return () => ipcRenderer.removeListener("download-canceled", listener);
+    },
+
+    onDownloadBlocked: (callback: (data: { reason: string }) => void) => {
+        const listener = (_: IpcRendererEvent, data: { reason: string }) => callback(data);
+        ipcRenderer.on("download-blocked", listener);
+        return () => ipcRenderer.removeListener("download-blocked", listener);
+    },
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);
