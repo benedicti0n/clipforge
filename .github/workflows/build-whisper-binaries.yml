@@ -26,9 +26,8 @@ jobs:
       - name: Install dependencies (mac)
         if: startsWith(matrix.os, 'macos')
         run: |
-          brew install cmake make || true
+          brew install cmake || true
           cmake --version
-          make --version
 
       # ---------------- Linux ----------------
       - name: Install dependencies (linux)
@@ -37,7 +36,6 @@ jobs:
           sudo apt update
           sudo apt install -y build-essential cmake git
           cmake --version
-          make --version
 
       # ---------------- Windows ----------------
       - name: Setup MSYS2 environment (windows)
@@ -56,36 +54,38 @@ jobs:
           git clone https://github.com/ggerganov/whisper.cpp.git
           cd whisper.cpp
 
-          # Enable Metal for ARM macOS builds
+          mkdir -p build && cd build
+          echo "⚙️ Configuring CMake..."
           if [[ "${{ matrix.target }}" == "macos-arm64" ]]; then
-            echo "⚙️ Building with Metal acceleration (ARM64)..."
-            make -C examples/main GGML_METAL=1 GGML_ACCELERATE=1 -j 4
+            cmake .. -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON -DGGML_ACCELERATE=ON
           else
-            echo "⚙️ Building normally..."
-            make -C examples/main -j 4
+            cmake .. -DCMAKE_BUILD_TYPE=Release
           fi
 
-          echo "🧩 Listing build outputs:"
-          find . -type f -name "main*" -size +100k -print
+          echo "🏗️ Building whisper-cli..."
+          cmake --build . --config Release -j 4
 
-          echo "🔍 Searching for built binary..."
-          BIN_PATH=$(find examples/main -type f -name "main*" -size +100k 2>/dev/null | head -n 1 || true)
+          echo "🧩 Listing potential outputs:"
+          find . -type f -maxdepth 5 -print | head -n 50
+
+          echo "🔍 Searching for built whisper-cli binary..."
+          BIN_PATH=$(find ./bin ./build/bin . -type f \( -name "whisper-cli" -o -name "whisper-cli.exe" \) -size +100k 2>/dev/null | head -n 1 || true)
 
           if [ -z "$BIN_PATH" ]; then
-            echo "❌ ERROR: Could not find compiled whisper binary!"
+            echo "❌ ERROR: Could not find compiled whisper-cli binary!"
             exit 1
           fi
 
           echo "✅ Found binary: $BIN_PATH"
           ls -lh "$BIN_PATH"
 
-          mkdir -p ../artifacts
+          mkdir -p ../../artifacts
 
           if [[ "${{ matrix.target }}" == "windows-x64" ]]; then
-            cp "$BIN_PATH" ../artifacts/whisper-${{ matrix.target }}.exe
+            cp "$BIN_PATH" ../../artifacts/whisper-${{ matrix.target }}.exe
           else
-            cp "$BIN_PATH" ../artifacts/whisper-${{ matrix.target }}
-            chmod +x ../artifacts/whisper-${{ matrix.target }}
+            cp "$BIN_PATH" ../../artifacts/whisper-${{ matrix.target }}
+            chmod +x ../../artifacts/whisper-${{ matrix.target }}
           fi
 
       # ---------------- Upload artifact ----------------
