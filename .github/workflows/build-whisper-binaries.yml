@@ -26,8 +26,9 @@ jobs:
       - name: Install dependencies (mac)
         if: startsWith(matrix.os, 'macos')
         run: |
-          brew install cmake || true
+          brew install cmake make || true
           cmake --version
+          make --version
 
       # ---------------- Linux ----------------
       - name: Install dependencies (linux)
@@ -36,11 +37,16 @@ jobs:
           sudo apt update
           sudo apt install -y build-essential cmake git
           cmake --version
+          make --version
 
       # ---------------- Windows ----------------
-      - name: Setup MSVC (windows)
+      - name: Setup MSYS2 environment (windows)
         if: matrix.os == 'windows-latest'
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: git make mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake
 
       # ---------------- Build whisper.cpp ----------------
       - name: Build whisper.cpp
@@ -49,26 +55,21 @@ jobs:
           echo "🔧 Cloning whisper.cpp..."
           git clone https://github.com/ggerganov/whisper.cpp.git
           cd whisper.cpp
-          mkdir build && cd build
 
-          echo "⚙️ Running CMake..."
-          # Enable Metal on ARM macOS
+          # Enable Metal for ARM macOS builds
           if [[ "${{ matrix.target }}" == "macos-arm64" ]]; then
-            cmake .. -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON -DGGML_ACCELERATE=ON
+            echo "⚙️ Building with Metal acceleration (ARM64)..."
+            make -C examples/main GGML_METAL=1 GGML_ACCELERATE=1 -j 4
           else
-            cmake .. -DCMAKE_BUILD_TYPE=Release
+            echo "⚙️ Building normally..."
+            make -C examples/main -j 4
           fi
 
-          echo "🏗️ Building target 'main'..."
-          cmake --build . --config Release --target main -j 4 || \
-          cmake --build . --config Release --target examples/main -j 4 || \
-          cmake --build . --config Release -j 4
-
-          echo "🧩 Listing potential outputs:"
-          find . -type f -maxdepth 5 -print | head -n 60
+          echo "🧩 Listing build outputs:"
+          find . -type f -name "main*" -size +100k -print
 
           echo "🔍 Searching for built binary..."
-          BIN_PATH=$(find . -type f \( -name "main" -o -name "main.exe" \) -size +100k 2>/dev/null | head -n 1 || true)
+          BIN_PATH=$(find examples/main -type f -name "main*" -size +100k 2>/dev/null | head -n 1 || true)
 
           if [ -z "$BIN_PATH" ]; then
             echo "❌ ERROR: Could not find compiled whisper binary!"
@@ -78,13 +79,13 @@ jobs:
           echo "✅ Found binary: $BIN_PATH"
           ls -lh "$BIN_PATH"
 
-          mkdir -p ../../artifacts
+          mkdir -p ../artifacts
 
           if [[ "${{ matrix.target }}" == "windows-x64" ]]; then
-            cp "$BIN_PATH" ../../artifacts/whisper-${{ matrix.target }}.exe
+            cp "$BIN_PATH" ../artifacts/whisper-${{ matrix.target }}.exe
           else
-            cp "$BIN_PATH" ../../artifacts/whisper-${{ matrix.target }}
-            chmod +x ../../artifacts/whisper-${{ matrix.target }}
+            cp "$BIN_PATH" ../artifacts/whisper-${{ matrix.target }}
+            chmod +x ../artifacts/whisper-${{ matrix.target }}
           fi
 
       # ---------------- Upload artifact ----------------
