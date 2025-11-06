@@ -1,7 +1,7 @@
 name: Build Whisper Binaries
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # allows manual triggering from the Actions tab
 
 jobs:
   build:
@@ -22,13 +22,13 @@ jobs:
       - uses: actions/checkout@v4
 
       # ---------------- macOS ----------------
-      - name: Install deps (mac)
+      - name: Install dependencies (mac)
         if: startsWith(matrix.os, 'macos')
         run: |
           brew install cmake
 
       # ---------------- Linux ----------------
-      - name: Install deps (linux)
+      - name: Install dependencies (linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt update
@@ -39,22 +39,43 @@ jobs:
         if: matrix.os == 'windows-latest'
         uses: ilammy/msvc-dev-cmd@v1
 
-      # ---------------- Build ----------------
+      # ---------------- Build whisper.cpp ----------------
       - name: Build whisper.cpp
         shell: bash
         run: |
+          echo "🔧 Cloning whisper.cpp..."
           git clone https://github.com/ggerganov/whisper.cpp.git
           cd whisper.cpp
           mkdir build && cd build
+          echo "⚙️ Running CMake..."
           cmake .. -DCMAKE_BUILD_TYPE=Release
+          echo "🏗️ Building..."
           cmake --build . --config Release
+
           mkdir -p ../../artifacts
-          if [ "${{ matrix.target }}" == "windows-x64" ]; then
-            cp Release/main.exe ../../artifacts/whisper-${{ matrix.target }}.exe || cp bin/Release/main.exe ../../artifacts/whisper-${{ matrix.target }}.exe
-          else
-            cp main ../../artifacts/whisper-${{ matrix.target }} || cp bin/main ../../artifacts/whisper-${{ matrix.target }}
+          echo "🧩 Listing build output:"
+          find . -type f -maxdepth 3 -print
+
+          echo "🔍 Searching for built binary..."
+          BIN_PATH=$(find . -type f -perm +111 -name "main*" 2>/dev/null | head -n 1 || true)
+          if [ -z "$BIN_PATH" ]; then
+            BIN_PATH=$(find . -type f -name "main*" 2>/dev/null | head -n 1 || true)
           fi
 
+          echo "✅ Found binary: $BIN_PATH"
+
+          if [ -n "$BIN_PATH" ]; then
+            if [[ "${{ matrix.target }}" == "windows-x64" ]]; then
+              cp "$BIN_PATH" ../../artifacts/whisper-${{ matrix.target }}.exe
+            else
+              cp "$BIN_PATH" ../../artifacts/whisper-${{ matrix.target }}
+            fi
+          else
+            echo "❌ ERROR: could not find compiled whisper binary!"
+            exit 1
+          fi
+
+      # ---------------- Upload artifact ----------------
       - name: Upload binaries as artifacts
         uses: actions/upload-artifact@v4
         with:
