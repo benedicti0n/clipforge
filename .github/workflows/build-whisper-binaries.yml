@@ -1,96 +1,154 @@
-name: Build Whisper Binaries
+name: Build whisper.cpp Binaries
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: macos-latest
-            target: macos-x64
+            arch: x64
+            name: whisper-macos-x64
           - os: macos-latest
-            target: macos-arm64
+            arch: arm64
+            name: whisper-macos-arm64
           - os: ubuntu-latest
-            target: linux-x64
+            arch: x64
+            name: whisper-linux-x64
           - os: windows-latest
-            target: windows-x64
+            arch: x64
+            name: whisper-windows-x64.exe
+
+    runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
-
-      # ---------------- macOS ----------------
-      - name: Install dependencies (mac)
-        if: startsWith(matrix.os, 'macos')
+      - name: Checkout whisper.cpp
         run: |
-          brew install cmake || true
-          cmake --version
+          git clone https://github.com/ggerganov/whisper.cpp.git
+          cd whisper.cpp
+          echo "Cloned whisper.cpp at commit:"
+          git rev-parse HEAD
 
-      # ---------------- Linux ----------------
-      - name: Install dependencies (linux)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
         run: |
-          sudo apt update
-          sudo apt install -y build-essential cmake git
-          cmake --version
+          echo "Installing dependencies for macOS..."
+          brew install cmake
 
-      # ---------------- Windows ----------------
-      - name: Setup MSYS2 environment (windows)
-        if: matrix.os == 'windows-latest'
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo "Installing dependencies for Linux..."
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: true
-          install: git make mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-make
+            make
 
-      # ---------------- Build whisper.cpp ----------------
-      - name: Build whisper.cpp
-        shell: bash
+      - name: Build whisper.cpp (macOS x64)
+        if: runner.os == 'macOS' && matrix.arch == 'x64'
         run: |
-          echo "🔧 Cloning whisper.cpp..."
-          git clone https://github.com/ggerganov/whisper.cpp.git
           cd whisper.cpp
+          echo "Building whisper.cpp for macOS x64..."
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=x86_64
+          cmake --build build --config Release
+          echo "Build complete. Listing build outputs:"
+          find build -type f -name "whisper-cli" -o -name "main" -o -name "whisper"
+          ls -lh build/bin/ || ls -lh build/ || true
 
-          mkdir -p build && cd build
-          echo "⚙️ Configuring CMake..."
-          if [[ "${{ matrix.target }}" == "macos-arm64" ]]; then
-            cmake .. -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON -DGGML_ACCELERATE=ON
-          else
-            cmake .. -DCMAKE_BUILD_TYPE=Release
-          fi
+      - name: Build whisper.cpp (macOS ARM64 with Metal)
+        if: runner.os == 'macOS' && matrix.arch == 'arm64'
+        run: |
+          cd whisper.cpp
+          echo "Building whisper.cpp for macOS ARM64 with Metal and Accelerate..."
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DWHISPER_METAL=ON -DWHISPER_ACCELERATE=ON
+          cmake --build build --config Release
+          echo "Build complete. Listing build outputs:"
+          find build -type f -name "whisper-cli" -o -name "main" -o -name "whisper"
+          ls -lh build/bin/ || ls -lh build/ || true
 
-          echo "🏗️ Building whisper-cli..."
-          cmake --build . --config Release -j 4
+      - name: Build whisper.cpp (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cd whisper.cpp
+          echo "Building whisper.cpp for Linux x64..."
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+          echo "Build complete. Listing build outputs:"
+          find build -type f -name "whisper-cli" -o -name "main" -o -name "whisper"
+          ls -lh build/bin/ || ls -lh build/ || true
 
-          echo "🧩 Listing potential outputs:"
-          find . -type f -maxdepth 5 -print | head -n 50
+      - name: Build whisper.cpp (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          cd whisper.cpp
+          echo "Building whisper.cpp for Windows x64..."
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -G "MinGW Makefiles"
+          cmake --build build --config Release
+          echo "Build complete. Listing build outputs:"
+          find build -type f -name "whisper-cli.exe" -o -name "main.exe" -o -name "whisper.exe"
+          ls -lh build/bin/ || ls -lh build/ || true
 
-          echo "🔍 Searching for built whisper-cli binary..."
-          BIN_PATH=$(find ./bin ./build/bin . -type f \( -name "whisper-cli" -o -name "whisper-cli.exe" \) -size +100k 2>/dev/null | head -n 1 || true)
-
-          if [ -z "$BIN_PATH" ]; then
-            echo "❌ ERROR: Could not find compiled whisper-cli binary!"
+      - name: Find and prepare binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd whisper.cpp
+          echo "Searching for whisper binary..."
+          BINARY=$(find build -type f \( -name "whisper-cli" -o -name "main" -o -name "whisper" \) | head -n 1)
+          if [ -z "$BINARY" ]; then
+            echo "ERROR: No binary found!"
             exit 1
           fi
-
-          echo "✅ Found binary: $BIN_PATH"
-          ls -lh "$BIN_PATH"
-
-          mkdir -p ../../artifacts
-
-          if [[ "${{ matrix.target }}" == "windows-x64" ]]; then
-            cp "$BIN_PATH" ../../artifacts/whisper-${{ matrix.target }}.exe
-          else
-            cp "$BIN_PATH" ../../artifacts/whisper-${{ matrix.target }}
-            chmod +x ../../artifacts/whisper-${{ matrix.target }}
+          echo "Found binary: $BINARY"
+          ls -lh "$BINARY"
+          SIZE=$(stat -f%z "$BINARY" 2>/dev/null || stat -c%s "$BINARY" 2>/dev/null)
+          echo "Binary size: $SIZE bytes"
+          if [ "$SIZE" -lt 102400 ]; then
+            echo "ERROR: Binary is smaller than 100KB!"
+            exit 1
           fi
+          chmod +x "$BINARY"
+          cp "$BINARY" ../${{ matrix.name }}
+          ls -lh ../${{ matrix.name }}
 
-      # ---------------- Upload artifact ----------------
-      - name: Upload binaries as artifacts
+      - name: Find and prepare binary (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          cd whisper.cpp
+          echo "Searching for whisper binary..."
+          BINARY=$(find build -type f \( -name "whisper-cli.exe" -o -name "main.exe" -o -name "whisper.exe" \) | head -n 1)
+          if [ -z "$BINARY" ]; then
+            echo "ERROR: No binary found!"
+            exit 1
+          fi
+          echo "Found binary: $BINARY"
+          ls -lh "$BINARY"
+          SIZE=$(stat -c%s "$BINARY")
+          echo "Binary size: $SIZE bytes"
+          if [ "$SIZE" -lt 102400 ]; then
+            echo "ERROR: Binary is smaller than 100KB!"
+            exit 1
+          fi
+          cp "$BINARY" ../${{ matrix.name }}
+          ls -lh ../${{ matrix.name }}
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target }}
-          path: artifacts/
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}
+          if-no-files-found: error
