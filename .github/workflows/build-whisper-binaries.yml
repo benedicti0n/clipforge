@@ -25,7 +25,8 @@ jobs:
       - name: Install dependencies (mac)
         if: startsWith(matrix.os, 'macos')
         run: |
-          brew install cmake
+          brew install cmake || true
+          cmake --version
 
       # ---------------- Linux ----------------
       - name: Install dependencies (linux)
@@ -33,6 +34,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y build-essential cmake git
+          cmake --version
 
       # ---------------- Windows ----------------
       - name: Setup MSVC (windows)
@@ -49,30 +51,29 @@ jobs:
           mkdir build && cd build
           echo "⚙️ Running CMake..."
           cmake .. -DCMAKE_BUILD_TYPE=Release
-          echo "🏗️ Building..."
-          cmake --build . --config Release
+          echo "🏗️ Building target 'main'..."
+          cmake --build . --config Release --target main -j 4
 
-          mkdir -p ../../artifacts
           echo "🧩 Listing build output:"
           find . -type f -maxdepth 3 -print
 
           echo "🔍 Searching for built binary..."
-          BIN_PATH=$(find . -type f -perm +111 -name "main*" 2>/dev/null | head -n 1 || true)
+          BIN_PATH=$(find . -type f \( -name "main" -o -name "main.exe" \) -size +100k 2>/dev/null | head -n 1 || true)
+
           if [ -z "$BIN_PATH" ]; then
-            BIN_PATH=$(find . -type f -name "main*" 2>/dev/null | head -n 1 || true)
+            echo "❌ ERROR: Could not find compiled whisper binary!"
+            exit 1
           fi
 
           echo "✅ Found binary: $BIN_PATH"
+          ls -lh "$BIN_PATH"
 
-          if [ -n "$BIN_PATH" ]; then
-            if [[ "${{ matrix.target }}" == "windows-x64" ]]; then
-              cp "$BIN_PATH" ../../artifacts/whisper-${{ matrix.target }}.exe
-            else
-              cp "$BIN_PATH" ../../artifacts/whisper-${{ matrix.target }}
-            fi
+          mkdir -p ../../artifacts
+
+          if [[ "${{ matrix.target }}" == "windows-x64" ]]; then
+            cp "$BIN_PATH" ../../artifacts/whisper-${{ matrix.target }}.exe
           else
-            echo "❌ ERROR: could not find compiled whisper binary!"
-            exit 1
+            cp "$BIN_PATH" ../../artifacts/whisper-${{ matrix.target }}
           fi
 
       # ---------------- Upload artifact ----------------
