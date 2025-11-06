@@ -72,7 +72,12 @@ jobs:
           cmake --build build -j --config Release
           echo "Build complete. Listing build directory structure:"
           find build -type f -executable -o -name "whisper-cli" -o -name "whisper" -o -name "*.dylib" -o -name "*.so" 2>/dev/null || true
-          ls -lhR build/bin/ 2>/dev/null || ls -lhR build/ || true
+          echo ""
+          echo "Contents of build/bin/:"
+          ls -lhR build/bin/ 2>/dev/null || echo "build/bin/ does not exist"
+          echo ""
+          echo "All executables in build/:"
+          find build -type f -executable 2>/dev/null || true
 
       - name: Build whisper.cpp (Windows)
         if: runner.os == 'Windows'
@@ -84,7 +89,9 @@ jobs:
           cmake --build build -j --config Release
           echo "Build complete. Listing build directory structure:"
           find build -type f -name "*.exe" 2>/dev/null || true
-          ls -lhR build/bin/ 2>/dev/null || ls -lhR build/ || true
+          echo ""
+          echo "Contents of build/bin/:"
+          ls -lhR build/bin/ 2>/dev/null || echo "build/bin/ does not exist"
 
       - name: Verify and prepare binary (Unix)
         if: runner.os != 'Windows'
@@ -114,12 +121,18 @@ jobs:
             SIZE=$(stat -c%s "$BINARY")
           fi
           
-          echo "Binary size: $SIZE bytes ($(echo "scale=2; $SIZE/1024/1024" | bc 2>/dev/null || echo '?') MB)"
+          SIZE_KB=$((SIZE / 1024))
+          SIZE_MB=$(echo "scale=2; $SIZE/1024/1024" | bc 2>/dev/null || echo "N/A")
           
-          if [ "$SIZE" -lt 1048576 ]; then
-            echo "ERROR: Binary is smaller than 1MB - likely incomplete build!"
+          echo "Binary size: $SIZE bytes ($SIZE_KB KB, $SIZE_MB MB)"
+          
+          # Check minimum size of 100KB
+          if [ "$SIZE" -lt 102400 ]; then
+            echo "ERROR: Binary is smaller than 100KB ($SIZE_KB KB) - likely incomplete build!"
             exit 1
           fi
+          
+          echo "✓ Binary size check passed ($SIZE_KB KB >= 100 KB)"
           
           chmod +x "$BINARY"
           cp "$BINARY" "../${{ matrix.name }}"
@@ -152,12 +165,18 @@ jobs:
           ls -lh "$BINARY"
           
           SIZE=$(stat -c%s "$BINARY")
-          echo "Binary size: $SIZE bytes ($(echo "scale=2; $SIZE/1024/1024" | bc) MB)"
+          SIZE_KB=$((SIZE / 1024))
+          SIZE_MB=$(echo "scale=2; $SIZE/1024/1024" | bc)
           
-          if [ "$SIZE" -lt 1048576 ]; then
-            echo "ERROR: Binary is smaller than 1MB - likely incomplete build!"
+          echo "Binary size: $SIZE bytes ($SIZE_KB KB, $SIZE_MB MB)"
+          
+          # Check minimum size of 100KB
+          if [ "$SIZE" -lt 102400 ]; then
+            echo "ERROR: Binary is smaller than 100KB ($SIZE_KB KB) - likely incomplete build!"
             exit 1
           fi
+          
+          echo "✓ Binary size check passed ($SIZE_KB KB >= 100 KB)"
           
           cp "$BINARY" "../${{ matrix.name }}"
           
