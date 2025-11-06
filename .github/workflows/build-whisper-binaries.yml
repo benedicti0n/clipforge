@@ -1,7 +1,7 @@
 name: Build Whisper Binaries
 
 on:
-  workflow_dispatch:  # allows manual runs from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
@@ -21,22 +21,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
-        if: matrix.os == 'ubuntu-latest'
-        run: sudo apt update && sudo apt install -y build-essential cmake git
+      # ---------------- macOS ----------------
+      - name: Install deps (mac)
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          brew install cmake
 
+      # ---------------- Linux ----------------
+      - name: Install deps (linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential cmake git
+
+      # ---------------- Windows ----------------
+      - name: Setup MSVC (windows)
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # ---------------- Build ----------------
       - name: Build whisper.cpp
+        shell: bash
         run: |
           git clone https://github.com/ggerganov/whisper.cpp.git
           cd whisper.cpp
           mkdir build && cd build
-          cmake ..
+          cmake .. -DCMAKE_BUILD_TYPE=Release
           cmake --build . --config Release
           mkdir -p ../../artifacts
           if [ "${{ matrix.target }}" == "windows-x64" ]; then
-            cp bin/Release/main.exe ../../artifacts/whisper-${{ matrix.target }}.exe
+            cp Release/main.exe ../../artifacts/whisper-${{ matrix.target }}.exe || cp bin/Release/main.exe ../../artifacts/whisper-${{ matrix.target }}.exe
           else
-            cp bin/main ../../artifacts/whisper-${{ matrix.target }}
+            cp main ../../artifacts/whisper-${{ matrix.target }} || cp bin/main ../../artifacts/whisper-${{ matrix.target }}
           fi
 
       - name: Upload binaries as artifacts
