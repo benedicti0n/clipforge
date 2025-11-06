@@ -1,7 +1,7 @@
 name: Build Whisper Binaries
 
 on:
-  workflow_dispatch:  # allows manual triggering from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
@@ -49,13 +49,17 @@ jobs:
           git clone https://github.com/ggerganov/whisper.cpp.git
           cd whisper.cpp
           mkdir build && cd build
+
           echo "⚙️ Running CMake..."
           cmake .. -DCMAKE_BUILD_TYPE=Release
-          echo "🏗️ Building target 'main'..."
-          cmake --build . --config Release --target main -j 4
 
-          echo "🧩 Listing build output:"
-          find . -type f -maxdepth 3 -print
+          echo "🏗️ Building the main executable..."
+          cmake --build . --config Release --target main -j 4 || \
+          cmake --build . --config Release --target examples/main -j 4 || \
+          cmake --build . --config Release -j 4
+
+          echo "🧩 Listing potential outputs:"
+          find . -type f -maxdepth 5 -print | head -n 50
 
           echo "🔍 Searching for built binary..."
           BIN_PATH=$(find . -type f \( -name "main" -o -name "main.exe" \) -size +100k 2>/dev/null | head -n 1 || true)
@@ -74,6 +78,7 @@ jobs:
             cp "$BIN_PATH" ../../artifacts/whisper-${{ matrix.target }}.exe
           else
             cp "$BIN_PATH" ../../artifacts/whisper-${{ matrix.target }}
+            chmod +x ../../artifacts/whisper-${{ matrix.target }}
           fi
 
       # ---------------- Upload artifact ----------------
