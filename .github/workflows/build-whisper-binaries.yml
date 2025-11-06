@@ -12,25 +12,30 @@ jobs:
           - os: macos-latest
             arch: x64
             name: whisper-macos-x64
+            cmake_flags: "-DCMAKE_OSX_ARCHITECTURES=x86_64"
           - os: macos-latest
             arch: arm64
             name: whisper-macos-arm64
+            cmake_flags: "-DCMAKE_OSX_ARCHITECTURES=arm64 -DWHISPER_METAL=ON -DWHISPER_ACCELERATE=ON"
           - os: ubuntu-latest
             arch: x64
             name: whisper-linux-x64
+            cmake_flags: ""
           - os: windows-latest
             arch: x64
             name: whisper-windows-x64.exe
+            cmake_flags: ""
 
     runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout whisper.cpp
         run: |
-          git clone https://github.com/ggerganov/whisper.cpp.git
+          git clone https://github.com/ggml-org/whisper.cpp.git
           cd whisper.cpp
           echo "Cloned whisper.cpp at commit:"
           git rev-parse HEAD
+          git log -1 --oneline
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
@@ -45,7 +50,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake
 
-      - name: Install dependencies (Windows)
+      - name: Setup MSYS2 (Windows)
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2
         with:
@@ -57,38 +62,17 @@ jobs:
             mingw-w64-x86_64-make
             make
 
-      - name: Build whisper.cpp (macOS x64)
-        if: runner.os == 'macOS' && matrix.arch == 'x64'
+      - name: Build whisper.cpp (Unix)
+        if: runner.os != 'Windows'
         run: |
           cd whisper.cpp
-          echo "Building whisper.cpp for macOS x64..."
-          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=x86_64
-          cmake --build build --config Release
-          echo "Build complete. Listing build outputs:"
-          find build -type f -name "whisper-cli" -o -name "main" -o -name "whisper"
-          ls -lh build/bin/ || ls -lh build/ || true
-
-      - name: Build whisper.cpp (macOS ARM64 with Metal)
-        if: runner.os == 'macOS' && matrix.arch == 'arm64'
-        run: |
-          cd whisper.cpp
-          echo "Building whisper.cpp for macOS ARM64 with Metal and Accelerate..."
-          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DWHISPER_METAL=ON -DWHISPER_ACCELERATE=ON
-          cmake --build build --config Release
-          echo "Build complete. Listing build outputs:"
-          find build -type f -name "whisper-cli" -o -name "main" -o -name "whisper"
-          ls -lh build/bin/ || ls -lh build/ || true
-
-      - name: Build whisper.cpp (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          cd whisper.cpp
-          echo "Building whisper.cpp for Linux x64..."
-          cmake -B build -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --config Release
-          echo "Build complete. Listing build outputs:"
-          find build -type f -name "whisper-cli" -o -name "main" -o -name "whisper"
-          ls -lh build/bin/ || ls -lh build/ || true
+          echo "Building whisper.cpp for ${{ matrix.os }} ${{ matrix.arch }}..."
+          echo "CMake flags: ${{ matrix.cmake_flags }}"
+          cmake -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_flags }}
+          cmake --build build -j --config Release
+          echo "Build complete. Listing build directory structure:"
+          find build -type f -executable -o -name "whisper-cli" -o -name "whisper" -o -name "*.dylib" -o -name "*.so" 2>/dev/null || true
+          ls -lhR build/bin/ 2>/dev/null || ls -lhR build/ || true
 
       - name: Build whisper.cpp (Windows)
         if: runner.os == 'Windows'
@@ -97,54 +81,88 @@ jobs:
           cd whisper.cpp
           echo "Building whisper.cpp for Windows x64..."
           cmake -B build -DCMAKE_BUILD_TYPE=Release -G "MinGW Makefiles"
-          cmake --build build --config Release
-          echo "Build complete. Listing build outputs:"
-          find build -type f -name "whisper-cli.exe" -o -name "main.exe" -o -name "whisper.exe"
-          ls -lh build/bin/ || ls -lh build/ || true
+          cmake --build build -j --config Release
+          echo "Build complete. Listing build directory structure:"
+          find build -type f -name "*.exe" 2>/dev/null || true
+          ls -lhR build/bin/ 2>/dev/null || ls -lhR build/ || true
 
-      - name: Find and prepare binary (Unix)
+      - name: Verify and prepare binary (Unix)
         if: runner.os != 'Windows'
         run: |
           cd whisper.cpp
-          echo "Searching for whisper binary..."
-          BINARY=$(find build -type f \( -name "whisper-cli" -o -name "main" -o -name "whisper" \) | head -n 1)
-          if [ -z "$BINARY" ]; then
-            echo "ERROR: No binary found!"
+          echo "Searching for whisper-cli binary..."
+          
+          # Look specifically for whisper-cli in build/bin/
+          if [ -f "build/bin/whisper-cli" ]; then
+            BINARY="build/bin/whisper-cli"
+            echo "Found whisper-cli at: $BINARY"
+          else
+            echo "ERROR: whisper-cli not found at expected location build/bin/whisper-cli"
+            echo "Searching entire build directory:"
+            find build -type f -name "*whisper*" -o -name "*cli*" 2>/dev/null || true
             exit 1
           fi
-          echo "Found binary: $BINARY"
+          
+          echo "Binary details:"
           ls -lh "$BINARY"
-          SIZE=$(stat -f%z "$BINARY" 2>/dev/null || stat -c%s "$BINARY" 2>/dev/null)
-          echo "Binary size: $SIZE bytes"
-          if [ "$SIZE" -lt 102400 ]; then
-            echo "ERROR: Binary is smaller than 100KB!"
+          file "$BINARY" || true
+          
+          # Check file size
+          if [ "$(uname)" = "Darwin" ]; then
+            SIZE=$(stat -f%z "$BINARY")
+          else
+            SIZE=$(stat -c%s "$BINARY")
+          fi
+          
+          echo "Binary size: $SIZE bytes ($(echo "scale=2; $SIZE/1024/1024" | bc 2>/dev/null || echo '?') MB)"
+          
+          if [ "$SIZE" -lt 1048576 ]; then
+            echo "ERROR: Binary is smaller than 1MB - likely incomplete build!"
             exit 1
           fi
+          
           chmod +x "$BINARY"
-          cp "$BINARY" ../${{ matrix.name }}
-          ls -lh ../${{ matrix.name }}
+          cp "$BINARY" "../${{ matrix.name }}"
+          
+          echo "Final artifact:"
+          ls -lh "../${{ matrix.name }}"
 
-      - name: Find and prepare binary (Windows)
+      - name: Verify and prepare binary (Windows)
         if: runner.os == 'Windows'
         shell: msys2 {0}
         run: |
           cd whisper.cpp
-          echo "Searching for whisper binary..."
-          BINARY=$(find build -type f \( -name "whisper-cli.exe" -o -name "main.exe" -o -name "whisper.exe" \) | head -n 1)
-          if [ -z "$BINARY" ]; then
-            echo "ERROR: No binary found!"
+          echo "Searching for whisper-cli.exe binary..."
+          
+          # Look specifically for whisper-cli.exe in build/bin/
+          if [ -f "build/bin/whisper-cli.exe" ]; then
+            BINARY="build/bin/whisper-cli.exe"
+            echo "Found whisper-cli.exe at: $BINARY"
+          elif [ -f "build/bin/Release/whisper-cli.exe" ]; then
+            BINARY="build/bin/Release/whisper-cli.exe"
+            echo "Found whisper-cli.exe at: $BINARY"
+          else
+            echo "ERROR: whisper-cli.exe not found at expected locations"
+            echo "Searching entire build directory:"
+            find build -type f -name "*.exe" 2>/dev/null || true
             exit 1
           fi
-          echo "Found binary: $BINARY"
+          
+          echo "Binary details:"
           ls -lh "$BINARY"
+          
           SIZE=$(stat -c%s "$BINARY")
-          echo "Binary size: $SIZE bytes"
-          if [ "$SIZE" -lt 102400 ]; then
-            echo "ERROR: Binary is smaller than 100KB!"
+          echo "Binary size: $SIZE bytes ($(echo "scale=2; $SIZE/1024/1024" | bc) MB)"
+          
+          if [ "$SIZE" -lt 1048576 ]; then
+            echo "ERROR: Binary is smaller than 1MB - likely incomplete build!"
             exit 1
           fi
-          cp "$BINARY" ../${{ matrix.name }}
-          ls -lh ../${{ matrix.name }}
+          
+          cp "$BINARY" "../${{ matrix.name }}"
+          
+          echo "Final artifact:"
+          ls -lh "../${{ matrix.name }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
