@@ -7,6 +7,7 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: macos-latest
@@ -51,15 +52,20 @@ jobs:
           mkdir build && cd build
 
           echo "⚙️ Running CMake..."
-          cmake .. -DCMAKE_BUILD_TYPE=Release
+          # Enable Metal on ARM macOS
+          if [[ "${{ matrix.target }}" == "macos-arm64" ]]; then
+            cmake .. -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON -DGGML_ACCELERATE=ON
+          else
+            cmake .. -DCMAKE_BUILD_TYPE=Release
+          fi
 
-          echo "🏗️ Building the main executable..."
+          echo "🏗️ Building target 'main'..."
           cmake --build . --config Release --target main -j 4 || \
           cmake --build . --config Release --target examples/main -j 4 || \
           cmake --build . --config Release -j 4
 
           echo "🧩 Listing potential outputs:"
-          find . -type f -maxdepth 5 -print | head -n 50
+          find . -type f -maxdepth 5 -print | head -n 60
 
           echo "🔍 Searching for built binary..."
           BIN_PATH=$(find . -type f \( -name "main" -o -name "main.exe" \) -size +100k 2>/dev/null | head -n 1 || true)
