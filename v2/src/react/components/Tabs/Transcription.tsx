@@ -125,11 +125,7 @@ export default function Transcription() {
             <div className="border-2 h-2/3 w-1 rounded-full border-border translate-y-1/4" />
 
             {/* Right panel: Logs / Output */}
-            <TranscriptionOutput
-                logs={logs}
-                segments={segments}
-                isTranscribing={isTranscribing}
-            />
+            <TranscriptionOutput />
         </div>
     );
 }

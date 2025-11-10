@@ -8,6 +8,7 @@ import { FileText, Terminal, Upload, Trash2, MoveRight, Download } from "lucide-
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useTranscriptionStore } from "../../store/transcriptionStore";
+import { useVideoStore } from "../../store/videoStore";
 
 function formatTime(s: number) {
     const hh = Math.floor(s / 3600);
@@ -18,6 +19,7 @@ function formatTime(s: number) {
 }
 
 export default function TranscriptionOutput() {
+    const { video } = useVideoStore();
     const {
         logs,
         segments,
@@ -50,8 +52,9 @@ export default function TranscriptionOutput() {
     const handleDownloadTxt = () => {
         if (!segments) return;
         const text = segments.map((s) => s.text).join("\n");
-        downloadBlob(text, "transcription.txt");
-        toast.success("Downloaded transcription as TXT");
+        const name = video?.name?.replace(/\.[^/.]+$/, "") || "transcription";
+        downloadBlob(text, `${name}.txt`);
+        toast.success(`Downloaded ${name}.txt`);
     };
 
     const handleDownloadSrt = () => {
@@ -59,8 +62,9 @@ export default function TranscriptionOutput() {
         const srt = segments
             .map((s, i) => `${i + 1}\n${formatSrtTime(s.start)} --> ${formatSrtTime(s.end)}\n${s.text}\n`)
             .join("\n");
-        downloadBlob(srt, "transcription.srt");
-        toast.success("Downloaded transcription as SRT");
+        const name = video?.name?.replace(/\.[^/.]+$/, "") || "transcription";
+        downloadBlob(srt, `${name}.srt`);
+        toast.success(`Downloaded ${name}.srt`);
     };
 
     const downloadBlob = (data: string, filename: string) => {
@@ -126,7 +130,7 @@ export default function TranscriptionOutput() {
                     )}
                 </h2>
 
-                {viewMode !== "waiting" && (
+                {viewMode !== "waiting" && !isTranscribing && (
                     <Button
                         variant="ghost"
                         size="icon"
@@ -149,7 +153,7 @@ export default function TranscriptionOutput() {
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             transition={{ duration: 0.25 }}
-                            className="text-sm text-foreground p-1 font-mono opacity-80"
+                            className="text-xs text-foreground p-1 font-mono opacity-80"
                         >
                             Waiting...
                         </motion.div>
@@ -162,7 +166,7 @@ export default function TranscriptionOutput() {
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             transition={{ duration: 0.25 }}
-                            className="whitespace-pre-wrap text-sm text-foreground space-y-1 font-mono"
+                            className="whitespace-pre-wrap text-xs text-foreground space-y-1 font-mono"
                         >
                             {logs.length === 0
                                 ? "Starting transcription..."
@@ -195,13 +199,14 @@ export default function TranscriptionOutput() {
             </ScrollArea>
 
             {/* ✅ Action Bar (Visible for both logs & transcript) */}
-            <div className="flex items-center justify-between gap-3 mt-3">
-                <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" onClick={handleDownloadTxt}>
-                        <Download className="w-4 h-4 mr-1" /> Download as Txt
+            <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
+                <div className="grid grid-cols-5 gap-2 w-full">
+                    <Button variant="outline" className="w-full" onClick={handleDownloadTxt}>
+                        <Download className="w-4 h-4 mr-1" /> Txt
                     </Button>
-                    <Button variant="outline" onClick={handleDownloadSrt}>
-                        <Download className="w-4 h-4 mr-1" /> Download as Srt
+
+                    <Button variant="outline" className="w-full" onClick={handleDownloadSrt}>
+                        <Download className="w-4 h-4 mr-1" /> Srt
                     </Button>
 
                     {/* Upload input hidden, triggered by ref */}
@@ -214,27 +219,26 @@ export default function TranscriptionOutput() {
                     />
                     <Button
                         variant="outline"
+                        className="w-full"
                         onClick={() => fileInputRef.current?.click()}
                     >
-                        <Upload className="w-4 h-4 mr-1" /> Upload Transcription
+                        <Upload className="w-4 h-4 mr-1" /> Upload
                         {uploadedSrt && (
-                            <span className="ml-2 text-xs text-green-600">
-                                (Uploaded)
-                            </span>
+                            <span className="ml-1 text-xs text-green-600">(✓)</span>
                         )}
                     </Button>
 
-                    <Button variant="destructive" onClick={handleRemoveTranscription}>
-                        <Trash2 className="w-4 h-4 mr-1" /> Remove Transcription
+                    <Button variant="destructive" className="w-full" onClick={handleRemoveTranscription}>
+                        <Trash2 className="w-4 h-4 mr-1" /> Remove
+                    </Button>
+
+                    <Button
+                        className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                        onClick={handleMoveToClips}
+                    >
+                        <MoveRight className="w-4 h-4 mr-1" /> Clips JSON
                     </Button>
                 </div>
-
-                <Button
-                    className="bg-primary text-primary-foreground hover:bg-primary/90"
-                    onClick={handleMoveToClips}
-                >
-                    Move to Clips JSON <MoveRight className="w-4 h-4 ml-1" />
-                </Button>
             </div>
 
             {/* Logs Modal */}
@@ -246,7 +250,7 @@ export default function TranscriptionOutput() {
                         </DialogTitle>
                     </DialogHeader>
                     <ScrollArea className="flex-1 mt-2 overflow-y-auto rounded-md border bg-background p-3">
-                        <div className="whitespace-pre-wrap text-sm font-mono text-foreground space-y-1">
+                        <div className="whitespace-pre-wrap text-xs font-mono text-foreground space-y-1">
                             {logs.length > 0
                                 ? logs.map((l, i) => <div key={i}>{l}</div>)
                                 : "No logs available."}
