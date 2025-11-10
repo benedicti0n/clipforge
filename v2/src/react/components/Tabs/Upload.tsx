@@ -10,9 +10,9 @@ export default function Upload() {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = (file: File | null) => {
+  const handleFile = async (file: File | null) => {
     if (!file) return;
-    setVideo(file);
+    await setVideo(file); // now async since it writes to disk
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {

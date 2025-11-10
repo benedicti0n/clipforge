@@ -85,7 +85,7 @@ export default function WhisperModelSelect() {
     return (
         <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-foreground flex items-center gap-2">
+                <label className="text-md font-bold text-foreground flex items-center gap-2">
                     Whisper Models
                     <button
                         onClick={() => window.electronAPI?.openWhisperFolder()}
@@ -137,7 +137,7 @@ export default function WhisperModelSelect() {
                                                     {model.sizeMB} MB • {model.note}
                                                 </p>
                                             </div>
-                                            <div className="absolute -right-4 -top-4">
+                                            <div className="absolute -right-2 -top-2">
                                                 {isSelected && (
                                                     <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0" />
                                                 )}
@@ -147,18 +147,18 @@ export default function WhisperModelSelect() {
                                 </div>
 
                                 {/* Bottom Section: Status Badge or Download Button */}
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center justify-between gap-2">
                                     {cached ? (
                                         <>
                                             <Badge
                                                 variant="default"
-                                                className="flex-1"
+                                                className="flex-1 rounded-md h-7"
                                             >
-                                                <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                <CheckCircle2 className="w-4 h-4" />
                                                 Cached
                                             </Badge>
                                             <Button
-                                                variant="ghost"
+                                                variant="outline"
                                                 size="icon"
                                                 className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                                                 onClick={(e) => handleDelete(e, model.key)}

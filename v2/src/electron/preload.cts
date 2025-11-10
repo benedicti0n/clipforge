@@ -3,6 +3,12 @@ import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 console.log("✅ Preload loaded!");
 
 const electronAPI = {
+    saveFileFromBlob: async (savePath: string, file: File) => {
+        const arrayBuffer = await file.arrayBuffer();
+        const buf = Buffer.from(arrayBuffer);
+        return ipcRenderer.invoke("save-file", savePath, buf);
+    },
+
     // ✅ Direct high-level API calls
     listWhisperModels: () => {
         console.log("📄 preload → invoking list-whisper-models");
@@ -79,6 +85,44 @@ const electronAPI = {
         ipcRenderer.on("download-blocked", listener);
         return () => ipcRenderer.removeListener("download-blocked", listener);
     },
+
+
+
+
+    startTranscription: (params: {
+        modelKey: string;
+        modelFilename: string;
+        inputPath: string;
+        locale?: string;
+        translate?: boolean;
+    }) => ipcRenderer.invoke("start-transcription", params),
+
+    cancelTranscription: () => ipcRenderer.invoke("cancel-transcription"),
+
+    onTranscribeLog: (cb: (data: { line: string }) => void) => {
+        const fn = (_: IpcRendererEvent, data: { line: string }) => cb(data);
+        ipcRenderer.on("transcribe-log", fn);
+        return () => ipcRenderer.removeListener("transcribe-log", fn);
+    },
+
+    onTranscribeResult: (cb: (data: {
+        segments: { start: number; end: number; text: string }[];
+        srt: string;
+        jsonPath: string;
+        srtPath: string;
+    }) => void) => {
+        const fn = (_: IpcRendererEvent, data: any) => cb(data);
+        ipcRenderer.on("transcribe-result", fn);
+        return () => ipcRenderer.removeListener("transcribe-result", fn);
+    },
+
+    onTranscribeError: (cb: (data: { error: string }) => void) => {
+        const fn = (_: IpcRendererEvent, data: { error: string }) => cb(data);
+        ipcRenderer.on("transcribe-error", fn);
+        return () => ipcRenderer.removeListener("transcribe-error", fn);
+    },
+
+    getUserDataPath: () => ipcRenderer.invoke("get-user-data-path"),
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);

@@ -4,6 +4,7 @@ import { registerSaveFileHandler } from "./saveFile.js";
 import { registerDeleteFileHandler } from "./deleteFile.js";
 import { registerOpenFolderHandler } from "./openFolder.js";
 import { registerListModelsHandler } from "./listModels.js";
+import { registerTranscriptionHandlers } from "./transcribe.js";
 
 export function registerIpcHandlers() {
     console.log("🔌 Registering IPC handlers...");
@@ -12,5 +13,5 @@ export function registerIpcHandlers() {
     registerDeleteFileHandler();
     registerOpenFolderHandler();
     registerListModelsHandler();
+    registerTranscriptionHandlers()
 };
-

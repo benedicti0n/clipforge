@@ -1,8 +1,7 @@
-// src/react/store/videoStore.ts
 import { create } from "zustand";
 
 export interface VideoMeta {
-    file: File | null;
+    filePath: string | null;
     name: string;
     size: number;
     duration: number;
@@ -11,36 +10,45 @@ export interface VideoMeta {
 
 interface VideoState {
     video: VideoMeta | null;
-    setVideo: (file: File) => void;
-    clearVideo: () => void;
+    setVideo: (file: File) => Promise<void>;
+    clearVideo: () => Promise<void>;
 }
 
 export const useVideoStore = create<VideoState>((set) => ({
     video: null,
 
-    setVideo: (file: File) => {
+    setVideo: async (file: File) => {
         if (file.size > 2 * 1024 * 1024 * 1024) {
             alert("File too large! Max limit is 2GB.");
             return;
         }
 
-        const url = URL.createObjectURL(file);
-        const video = document.createElement("video");
-        video.src = url;
+        const userData = await window.electronAPI!.getUserDataPath();
+        const videosDir = `${userData}/uploaded_videos`;
+        const safeName = `${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
+        const absPath = `${videosDir}/${safeName}`;
 
-        // Extract metadata asynchronously
-        video.onloadedmetadata = () => {
+        // ✅ Save to disk using preload helper
+        await window.electronAPI!.saveFileFromBlob(absPath, file);
+
+        const url = URL.createObjectURL(file);
+        const videoEl = document.createElement("video");
+        videoEl.src = url;
+
+        videoEl.onloadedmetadata = () => {
             set({
                 video: {
-                    file,
+                    filePath: absPath,
                     name: file.name,
                     size: file.size,
-                    duration: video.duration,
+                    duration: videoEl.duration,
                     url,
                 },
             });
         };
     },
 
-    clearVideo: () => set({ video: null }),
+    clearVideo: async () => {
+        set({ video: null });
+    },
 }));
