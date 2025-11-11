@@ -4,6 +4,7 @@ import * as React from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import Upload from "../Tabs/Upload";
 import Transcription from "../Tabs/Transcription";
+import ClipsJson from "../Tabs/ClipsJson";
 
 export function AppTabs() {
     const [activeTab, setActiveTab] = React.useState("upload");
@@ -54,9 +55,7 @@ export function AppTabs() {
                     </TabsContent>
 
                     <TabsContent value="clips-json" className="h-full">
-                        <p className="text-sm text-muted-foreground">
-                            View and edit extracted clips JSON here.
-                        </p>
+                        <ClipsJson />
                     </TabsContent>
 
                     <TabsContent value="clips-generation" className="h-full">
