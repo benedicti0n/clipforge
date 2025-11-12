@@ -1,16 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Textarea } from "../ui/textarea";
-import { KeyRound, Upload } from "lucide-react";
+import { Upload } from "lucide-react";
+import AddGeminiKeyDialog from "../Dialogs/AddGeminiKeyDialog";
+import DeleteGeminiKeyDialog from "../Dialogs/DeleteGeminiKeyDialog";
+import { useGeminiStore } from "../../store/geminiStore";
+import { GEMINI_MODELS } from "../../../constants/geminiModels";
 
 export default function ClipsJsonLeft() {
-    const [selectedKey, setSelectedKey] = useState("");
-    const [selectedModel, setSelectedModel] = useState("");
     const [selectedPrompt, setSelectedPrompt] = useState("");
+    const { keys, selectedKey, selectKey, selectedModel, selectModel } = useGeminiStore();
+
+    const modelInfo = useMemo(
+        () => GEMINI_MODELS.find((m) => m.id === selectedModel),
+        [selectedModel]
+    );
 
     return (
         <div className="space-y-6 flex flex-col justify-between h-full">
@@ -23,31 +31,54 @@ export default function ClipsJsonLeft() {
                     <div className="space-y-1">
                         <Label className="text-sm">API Key</Label>
                         <div className="flex gap-2">
-                            <Select onValueChange={setSelectedKey}>
+                            <Select onValueChange={selectKey} value={selectedKey || ""}>
                                 <SelectTrigger className="w-full">
                                     <SelectValue placeholder="Select key" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="key1">Key 1</SelectItem>
-                                    <SelectItem value="key2">Key 2</SelectItem>
+                                    {keys.length > 0 ? (
+                                        keys.map((k) => (
+                                            <SelectItem key={k.name} value={k.name}>
+                                                {k.name}
+                                            </SelectItem>
+                                        ))
+                                    ) : (
+                                        <SelectItem value="none" disabled>
+                                            No keys added
+                                        </SelectItem>
+                                    )}
                                 </SelectContent>
                             </Select>
-                            <Button>Add <KeyRound /></Button>
+
+                            <AddGeminiKeyDialog />
+                            <DeleteGeminiKeyDialog />
                         </div>
                     </div>
 
                     {/* Model Selection */}
                     <div className="space-y-1">
                         <Label className="text-sm">Model</Label>
-                        <Select onValueChange={setSelectedModel}>
+                        <Select onValueChange={selectModel} value={selectedModel || ""}>
                             <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Select model" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="gemini-1.5-flash">1.5 Flash</SelectItem>
-                                <SelectItem value="gemini-1.5-pro">1.5 Pro</SelectItem>
+                                {GEMINI_MODELS.map((m) => (
+                                    <SelectItem key={m.id} value={m.id}>
+                                        {m.label}
+                                    </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
+
+                        {/* Model Info */}
+                        {modelInfo && (
+                            <div className="text-xs text-muted-foreground mt-1 border rounded-md p-2 bg-muted/40">
+                                <div className="font-medium text-foreground">{modelInfo.label}</div>
+                                <div>{modelInfo.price}</div>
+                                <div>{modelInfo.speed}</div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -84,6 +115,7 @@ export default function ClipsJsonLeft() {
                     </Button>
                 </div>
             </div>
+
             {/* Cost Estimation */}
             <div className="space-y-3 pt-4 border-t">
                 <h3 className="text-sm font-medium text-muted-foreground">Estimate</h3>
