@@ -14,6 +14,7 @@ import {
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { useGeminiStore } from "../../store/geminiStore";
+import { KeyRound, Save } from "lucide-react";
 
 export default function AddGeminiKeyDialog() {
     const { addKey } = useGeminiStore();
@@ -32,8 +33,8 @@ export default function AddGeminiKeyDialog() {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                    Add Key
+                <Button>
+                    Add <KeyRound />
                 </Button>
             </DialogTrigger>
             <DialogContent>
@@ -44,8 +45,8 @@ export default function AddGeminiKeyDialog() {
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-3 py-2">
-                    <div>
+                <div className="space-y-4 py-2">
+                    <div className="space-y-2">
                         <Label>Name</Label>
                         <Input
                             value={name}
@@ -53,7 +54,7 @@ export default function AddGeminiKeyDialog() {
                             placeholder="e.g. Personal Key"
                         />
                     </div>
-                    <div>
+                    <div className="space-y-2">
                         <Label>API Key</Label>
                         <Input
                             type="password"
@@ -66,7 +67,7 @@ export default function AddGeminiKeyDialog() {
 
                 <DialogFooter>
                     <Button onClick={handleAdd} disabled={!name || !key}>
-                        Save
+                        <Save /> Save
                     </Button>
                 </DialogFooter>
             </DialogContent>

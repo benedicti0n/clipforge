@@ -11,6 +11,7 @@ import { useGeminiStore } from "../../store/geminiStore";
 import { usePromptStore } from "../../store/promptStore";
 import { GEMINI_MODELS } from "../../../constants/geminiModels";
 import { PROMPT_PRESETS } from "../../../constants/prompt";
+import { Dot } from "lucide-react";
 
 export default function ClipsJsonLeft() {
     const { keys, selectedKey, selectKey, selectedModel, selectModel } = useGeminiStore();
@@ -97,9 +98,9 @@ export default function ClipsJsonLeft() {
                         </Select>
 
                         {modelInfo && (
-                            <div className="text-xs text-muted-foreground mt-1 border rounded-md p-2 bg-muted/40">
-                                <div className="font-medium text-foreground">{modelInfo.label}</div>
+                            <div className="text-xs text-muted-foreground py-1 flex items-center">
                                 <div>{modelInfo.price}</div>
+                                <Dot />
                                 <div>{modelInfo.speed}</div>
                             </div>
                         )}
@@ -113,18 +114,23 @@ export default function ClipsJsonLeft() {
                     {/* Genre Select */}
                     <div className="space-y-1">
                         <Label className="text-sm">Genre</Label>
-                        <Select onValueChange={handleGenreChange} value={selectedGenre || ""}>
-                            <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Select genre" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {genres.map((genre) => (
-                                    <SelectItem key={genre} value={genre}>
-                                        {genre.charAt(0).toUpperCase() + genre.slice(1)}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        <div className="flex gap-2">
+                            <Select onValueChange={handleGenreChange} value={selectedGenre || ""}>
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Select genre" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {genres.map((genre) => (
+                                        <SelectItem key={genre} value={genre}>
+                                            {genre.charAt(0).toUpperCase() + genre.slice(1)}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            {/* Upload Dialog Button */}
+                            <AddCustomPromptDialog />
+                        </div>
                     </div>
 
                     {/* Prompt Preview */}
@@ -135,15 +141,12 @@ export default function ClipsJsonLeft() {
                                 : "Template"}
                         </Label>
                         <Textarea
-                            className="h-48 resize-none text-xs font-mono leading-tight"
+                            className="h-48 resize-none !text-xs font-mono leading-tight"
                             placeholder="Prompt template preview..."
                             value={promptPreview}
                             readOnly
                         />
                     </div>
-
-                    {/* Upload Dialog Button */}
-                    <AddCustomPromptDialog />
                 </div>
             </div>
 

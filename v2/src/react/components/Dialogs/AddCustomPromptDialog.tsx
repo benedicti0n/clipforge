@@ -13,7 +13,7 @@ import {
 } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { Upload } from "lucide-react";
+import { Save, Upload } from "lucide-react";
 import { usePromptStore } from "../../store/promptStore";
 
 export default function AddCustomPromptDialog() {
@@ -53,8 +53,8 @@ export default function AddCustomPromptDialog() {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button className="w-full">
-                    <Upload /> Upload Custom Prompt
+                <Button>
+                    <Upload /> Custom
                 </Button>
             </DialogTrigger>
 
@@ -67,7 +67,7 @@ export default function AddCustomPromptDialog() {
                 </DialogHeader>
 
                 <div className="space-y-4 py-2">
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                         <Label>Genre Name</Label>
                         <Input
                             value={genreName}
@@ -76,7 +76,7 @@ export default function AddCustomPromptDialog() {
                         />
                     </div>
 
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                         <Label>Prompt File (.txt)</Label>
                         <input
                             type="file"
@@ -85,7 +85,7 @@ export default function AddCustomPromptDialog() {
                             className="hidden"
                             onChange={handleFileSelect}
                         />
-                        <Button variant="secondary" onClick={triggerFile} className="w-full">
+                        <Button variant={"outline"} onClick={triggerFile} className="w-full">
                             Choose File
                         </Button>
                         {fileName && (
@@ -98,7 +98,7 @@ export default function AddCustomPromptDialog() {
 
                 <DialogFooter>
                     <Button onClick={handleConfirm} disabled={!genreName || !fileName}>
-                        Save Prompt
+                        <Save /> Save Prompt
                     </Button>
                 </DialogFooter>
             </DialogContent>

@@ -32,7 +32,7 @@ export default function DeleteGeminiKeyDialog() {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="destructive" size="sm">
+                <Button variant="outline">
                     <Trash2 />
                 </Button>
             </DialogTrigger>
@@ -46,7 +46,7 @@ export default function DeleteGeminiKeyDialog() {
 
                 <div className="py-2">
                     <Select onValueChange={setToDelete} value={toDelete}>
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full">
                             <SelectValue placeholder="Select key to delete" />
                         </SelectTrigger>
                         <SelectContent>
@@ -66,7 +66,7 @@ export default function DeleteGeminiKeyDialog() {
                 </div>
 
                 <DialogFooter>
-                    <Button variant="destructive" onClick={handleDelete} disabled={!toDelete}>
+                    <Button variant="outline" onClick={handleDelete} disabled={!toDelete}>
                         Confirm Delete
                     </Button>
                 </DialogFooter>
