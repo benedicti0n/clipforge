@@ -1,24 +1,49 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { Button } from "../ui/button";
+import { useMemo } from "react";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Textarea } from "../ui/textarea";
-import { Upload } from "lucide-react";
 import AddGeminiKeyDialog from "../Dialogs/AddGeminiKeyDialog";
 import DeleteGeminiKeyDialog from "../Dialogs/DeleteGeminiKeyDialog";
+import AddCustomPromptDialog from "../Dialogs/AddCustomPromptDialog";
 import { useGeminiStore } from "../../store/geminiStore";
+import { usePromptStore } from "../../store/promptStore";
 import { GEMINI_MODELS } from "../../../constants/geminiModels";
+import { PROMPT_PRESETS } from "../../../constants/prompt";
 
 export default function ClipsJsonLeft() {
-    const [selectedPrompt, setSelectedPrompt] = useState("");
     const { keys, selectedKey, selectKey, selectedModel, selectModel } = useGeminiStore();
+    const {
+        customPrompts,
+        savePrompt,
+        getPrompt,
+        selectedGenre,
+        setSelectedGenre,
+    } = usePromptStore();
 
     const modelInfo = useMemo(
         () => GEMINI_MODELS.find((m) => m.id === selectedModel),
         [selectedModel]
     );
+
+    const genres = [
+        ...Object.keys(PROMPT_PRESETS),
+        ...Object.keys(customPrompts).filter(
+            (g) => !Object.keys(PROMPT_PRESETS).includes(g)
+        ),
+    ];
+
+    const promptPreview = useMemo(() => {
+        if (!selectedGenre) return "";
+        const saved = getPrompt(selectedGenre);
+        if (saved) return saved;
+        return PROMPT_PRESETS[selectedGenre] || "";
+    }, [selectedGenre, getPrompt]);
+
+    const handleGenreChange = (genre: string) => {
+        setSelectedGenre(genre);
+    };
 
     return (
         <div className="space-y-6 flex flex-col justify-between h-full">
@@ -71,7 +96,6 @@ export default function ClipsJsonLeft() {
                             </SelectContent>
                         </Select>
 
-                        {/* Model Info */}
                         {modelInfo && (
                             <div className="text-xs text-muted-foreground mt-1 border rounded-md p-2 bg-muted/40">
                                 <div className="font-medium text-foreground">{modelInfo.label}</div>
@@ -86,33 +110,40 @@ export default function ClipsJsonLeft() {
                 <div className="space-y-4">
                     <h3 className="text-md font-bold">Prompt</h3>
 
+                    {/* Genre Select */}
                     <div className="space-y-1">
                         <Label className="text-sm">Genre</Label>
-                        <Select onValueChange={setSelectedPrompt}>
+                        <Select onValueChange={handleGenreChange} value={selectedGenre || ""}>
                             <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Select genre" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="gaming">Gaming</SelectItem>
-                                <SelectItem value="podcast">Podcast</SelectItem>
-                                <SelectItem value="educational">Educational</SelectItem>
-                                <SelectItem value="motivational">Motivational</SelectItem>
+                                {genres.map((genre) => (
+                                    <SelectItem key={genre} value={genre}>
+                                        {genre.charAt(0).toUpperCase() + genre.slice(1)}
+                                    </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>
 
+                    {/* Prompt Preview */}
                     <div className="space-y-1">
-                        <Label className="text-sm">Template</Label>
+                        <Label className="text-sm">
+                            {selectedGenre && getPrompt(selectedGenre)
+                                ? "Custom Prompt (saved)"
+                                : "Template"}
+                        </Label>
                         <Textarea
-                            className="h-32 resize-none text-sm"
+                            className="h-48 resize-none text-xs font-mono leading-tight"
                             placeholder="Prompt template preview..."
+                            value={promptPreview}
                             readOnly
                         />
                     </div>
 
-                    <Button className="w-full">
-                        <Upload /> Custom Prompt
-                    </Button>
+                    {/* Upload Dialog Button */}
+                    <AddCustomPromptDialog />
                 </div>
             </div>
 
