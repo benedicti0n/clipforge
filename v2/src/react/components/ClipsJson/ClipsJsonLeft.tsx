@@ -11,8 +11,9 @@ import { useGeminiStore } from "../../store/geminiStore";
 import { usePromptStore } from "../../store/promptStore";
 import { GEMINI_MODELS } from "../../../constants/geminiModels";
 import { PROMPT_PRESETS } from "../../../constants/prompt";
-import { Dot } from "lucide-react";
+import { Dot, Settings } from "lucide-react";
 import { Button } from "../ui/button";
+import { ScrollArea } from "../ui/scroll-area";
 
 interface ClipsJsonLeftProps {
     isLoading: boolean;
@@ -153,7 +154,7 @@ export default function ClipsJsonLeft({
             {/* Gemini Config */}
             <div className="space-y-4">
                 <div className="space-y-4">
-                    <h3 className="text-md font-bold">Configuration</h3>
+                    <h3 className="text-md font-bold flex gap-2 items-center"><Settings className="w-4 h-4" /> Configuration</h3>
 
                     {/* Gemini Key */}
                     <div className="space-y-1">
@@ -199,23 +200,6 @@ export default function ClipsJsonLeft({
                                     ))}
                                 </SelectContent>
                             </Select>
-                            <div className="flex gap-2">
-                                <Select onValueChange={handleGenreChange} value={selectedGenre || ""}>
-                                    <SelectTrigger className="w-full">
-                                        <SelectValue placeholder="Select genre" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {genres.map((genre) => (
-                                            <SelectItem key={genre} value={genre}>
-                                                {genre.charAt(0).toUpperCase() + genre.slice(1)}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-
-                                {/* Upload Dialog Button */}
-                                <AddCustomPromptDialog />
-                            </div>
                         </div>
 
                         {modelInfo && (
@@ -225,6 +209,23 @@ export default function ClipsJsonLeft({
                                 <div>{modelInfo.speed}</div>
                             </div>
                         )}
+                    </div>
+                    <div className="flex gap-2">
+                        <Select onValueChange={handleGenreChange} value={selectedGenre || ""}>
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select genre" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {genres.map((genre) => (
+                                    <SelectItem key={genre} value={genre}>
+                                        {genre.charAt(0).toUpperCase() + genre.slice(1)}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        {/* Upload Dialog Button */}
+                        <AddCustomPromptDialog />
                     </div>
                 </div>
 
@@ -237,12 +238,13 @@ export default function ClipsJsonLeft({
                                 ? "Custom Prompt (saved)"
                                 : "Template"}
                         </Label>
-                        <Textarea
-                            className="h-48 resize-none !text-xs font-mono leading-tight"
-                            placeholder="Prompt template preview..."
-                            value={promptPreview}
-                            readOnly
-                        />
+                        <ScrollArea
+                            className="flex-1 rounded-md border overflow-y-auto p-3 h-48"
+                        >
+                            <div className="whitespace-pre-wrap !text-xs text-foreground font-mono leading-tight">
+                                {promptPreview}
+                            </div>
+                        </ScrollArea>
                     </div>
                 </div>
             </div>
