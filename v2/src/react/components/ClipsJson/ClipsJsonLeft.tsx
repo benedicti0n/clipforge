@@ -96,12 +96,49 @@ export default function ClipsJsonLeft({
                     "⚠️ No valid response.";
             }
 
-            // ✅ Try prettifying JSON if possible
+            // ✅ Validate and filter clips
             try {
                 const parsed = JSON.parse(rawText);
-                setResponseText(JSON.stringify(parsed, null, 2));
-            } catch {
-                setResponseText(rawText);
+
+                // Validate it's an array
+                if (!Array.isArray(parsed)) {
+                    throw new Error("Response is not an array");
+                }
+
+                // Filter out clips shorter than 20 seconds
+                const validClips = parsed.filter((clip: any) => {
+                    if (!clip.totalDuration) return false;
+
+                    // Parse duration HH:MM:SS to seconds
+                    const parts = clip.totalDuration.split(':');
+                    const seconds = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+
+                    return seconds >= 20; // Minimum 20 seconds
+                });
+
+                // Validate first item has required fields
+                if (validClips.length > 0) {
+                    const requiredFields = ['startTime', 'endTime', 'transcriptionPart', 'totalDuration', 'viralityScore', 'suitableCaption'];
+                    const firstItem = validClips[0];
+                    const missingFields = requiredFields.filter(field => !(field in firstItem));
+
+                    if (missingFields.length > 0) {
+                        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+                    }
+                }
+
+                // Show stats
+                const removedCount = parsed.length - validClips.length;
+                console.log(`✅ Extracted ${validClips.length} valid clips (removed ${removedCount} clips under 20 seconds)`);
+
+                if (validClips.length === 0) {
+                    throw new Error("No valid clips found (all were under 20 seconds)");
+                }
+
+                setResponseText(JSON.stringify(validClips, null, 2));
+            } catch (parseError: any) {
+                console.error("JSON validation error:", parseError);
+                setResponseText(`❌ Invalid response format: ${parseError.message}\n\nRaw response:\n${rawText}`);
             }
         } catch (err: any) {
             console.error(err);

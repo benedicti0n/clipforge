@@ -10,11 +10,32 @@ export default function ClipsJson() {
     const [responseText, setResponseText] = useState<string | null>(null);
     const { segments, uploadedSrt } = useTranscriptionStore();
 
-    // ✅ Determine which transcription text to use
+    // ✅ Convert segments to proper SRT format with timestamps
     const transcriptSRT = useMemo(() => {
         if (uploadedSrt) return uploadedSrt.trim();
-        if (segments && segments.length > 0)
-            return segments.map((s) => `${s.text}`).join("\n");
+
+        if (segments && segments.length > 0) {
+            // Format as proper SRT with timestamps
+            return segments
+                .map((seg, index) => {
+                    const formatTime = (seconds: number) => {
+                        const hrs = Math.floor(seconds / 3600);
+                        const mins = Math.floor((seconds % 3600) / 60);
+                        const secs = Math.floor(seconds % 60);
+                        const ms = Math.floor((seconds % 1) * 1000);
+                        return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
+                    };
+
+                    return [
+                        index + 1,
+                        `${formatTime(seg.start)} --> ${formatTime(seg.end)}`,
+                        seg.text,
+                        '' // Empty line between segments
+                    ].join('\n');
+                })
+                .join('\n');
+        }
+
         return "";
     }, [uploadedSrt, segments]);
 
