@@ -1,6 +1,8 @@
 // src/types/electron.d.ts
 export interface ElectronAPI {
-    // Download
+    // ============================
+    // 🔽 Download
+    // ============================
     downloadModel: (url: string, savePath: string) => Promise<boolean>;
     saveFile: (path: string, buffer: Buffer) => Promise<boolean>;
     deleteFile: (path: string) => Promise<boolean>;
@@ -14,7 +16,9 @@ export interface ElectronAPI {
     onDownloadCanceled: (callback: (data: { file: string }) => void) => void;
     onDownloadBlocked: (callback: (data: { reason: string }) => void) => void;
 
-    // Transcription
+    // ============================
+    // 🎙️ Transcription
+    // ============================
     startTranscription: (params: {
         modelKey: string;
         modelFilename: string;
@@ -32,8 +36,29 @@ export interface ElectronAPI {
     }) => void) => void;
     onTranscribeError: (cb: (data: { error: string }) => void) => void;
     getUserDataPath: () => Promise<string>;
-}
 
+    // ============================
+    // 🧠 Gemini Integration
+    // ============================
+    runGemini: (params: {
+        apiKey: string;
+        model: string;
+        prompt: string;
+        transcript: string;
+    }) => Promise<{
+        success: boolean;
+        model?: string;
+        text?: string;
+        raw?: {
+            candidates?: {
+                content?: {
+                    parts?: { text?: string }[];
+                };
+            }[];
+        };
+        error?: string;
+    }>;
+}
 declare global {
     interface Window {
         electronAPI?: ElectronAPI;

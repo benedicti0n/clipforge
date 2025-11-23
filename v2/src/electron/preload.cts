@@ -123,6 +123,14 @@ const electronAPI = {
     },
 
     getUserDataPath: () => ipcRenderer.invoke("get-user-data-path"),
+
+
+    runGemini: (params: {
+        apiKey: string;
+        model: string;
+        prompt: string;
+        transcript: string;
+    }) => ipcRenderer.invoke("gemini:run", params),
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);
