@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Textarea } from "../ui/textarea";
 import AddGeminiKeyDialog from "../Dialogs/AddGeminiKeyDialog";
 import DeleteGeminiKeyDialog from "../Dialogs/DeleteGeminiKeyDialog";
 import AddCustomPromptDialog from "../Dialogs/AddCustomPromptDialog";
@@ -210,6 +209,8 @@ export default function ClipsJsonLeft({
                             </div>
                         )}
                     </div>
+
+                    {/* Prompt Section */}
                     <div className="flex gap-2">
                         <Select onValueChange={handleGenreChange} value={selectedGenre || ""}>
                             <SelectTrigger className="w-full">
