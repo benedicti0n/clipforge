@@ -18,11 +18,11 @@ export default function ClipsJsonRight({ responseText, transcriptSRT }: ClipsJso
             {/* Scrollable Area */}
             <ScrollArea className="flex-1 rounded-md border overflow-y-auto p-3 h-full">
                 {!responseText ? (
-                    <pre className="whitespace-pre-wrap text-sm text-foreground font-mono leading-tight">
+                    <pre className="whitespace-pre-wrap text-xs text-foreground font-mono leading-tight">
                         {transcriptSRT || "No transcription available."}
                     </pre>
                 ) : (
-                    <pre className="whitespace-pre-wrap text-sm text-foreground font-mono leading-tight">
+                    <pre className="whitespace-pre-wrap text-xs text-foreground font-mono leading-tight">
                         {responseText}
                     </pre>
                 )}

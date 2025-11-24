@@ -73,7 +73,7 @@ export default function ClipsJsonLeft({
     };
 
     return (
-        <div className="space-y-6 flex flex-col justify-between h-full">
+        <div className="space-y-4 flex flex-col justify-between h-full">
             {/* Configuration Section */}
             <div className="space-y-4">
                 <h3 className="text-md font-bold flex gap-2 items-center">
