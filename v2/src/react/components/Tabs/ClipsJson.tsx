@@ -7,7 +7,6 @@ import { useTranscriptionStore } from "../../store/transcriptionStore";
 
 export default function ClipsJson() {
     const [isLoading, setIsLoading] = useState(false);
-    const [responseText, setResponseText] = useState<string | null>(null);
     const { segments, uploadedSrt } = useTranscriptionStore();
 
     // ✅ Convert segments to proper SRT format with timestamps
@@ -40,24 +39,19 @@ export default function ClipsJson() {
     }, [uploadedSrt, segments]);
 
     return (
-        <div className="flex h-full gap-4">
+        <div className="flex h-full">
             {/* LEFT PANEL */}
             <div className="w-1/3">
                 <ClipsJsonLeft
                     isLoading={isLoading}
                     setIsLoading={setIsLoading}
-                    responseText={responseText}
-                    setResponseText={setResponseText}
                     transcriptSRT={transcriptSRT}
                 />
             </div>
 
             {/* RIGHT PANEL */}
             <div className="flex-1">
-                <ClipsJsonRight
-                    responseText={responseText}
-                    transcriptSRT={transcriptSRT}
-                />
+                <ClipsJsonRight transcriptSRT={transcriptSRT} />
             </div>
         </div>
     );

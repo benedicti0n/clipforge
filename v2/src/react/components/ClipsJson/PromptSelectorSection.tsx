@@ -7,6 +7,7 @@ import { ScrollArea } from "../ui/scroll-area";
 import AddCustomPromptDialog from "../Dialogs/AddCustomPromptDialog";
 import { usePromptStore } from "../../store/promptStore";
 import { PROMPT_PRESETS } from "../../../constants/prompt";
+import { Quote, TextSelect } from "lucide-react";
 
 export default function PromptSelectorSection() {
     const { customPrompts, getPrompt, selectedGenre, setSelectedGenre } = usePromptStore();
@@ -33,7 +34,7 @@ export default function PromptSelectorSection() {
         <div className="space-y-4">
             {/* Genre Selection */}
             <div className="space-y-1">
-                <Label className="text-sm">Prompt Genre</Label>
+                <Label className="text-sm flex gap-2 items-center"><Quote className="w-4 h-4" /> Prompt Genre</Label>
                 <div className="flex gap-2">
                     <Select onValueChange={handleGenreChange} value={selectedGenre || ""}>
                         <SelectTrigger className="w-full">
@@ -54,10 +55,10 @@ export default function PromptSelectorSection() {
 
             {/* Prompt Preview */}
             <div className="space-y-1">
-                <Label className="text-sm">
+                <Label className="text-sm flex gap-2 items-center">
                     {selectedGenre && getPrompt(selectedGenre)
-                        ? "Custom Prompt (saved)"
-                        : "Template"}
+                        ? <><TextSelect className="w-4 h-4" /> Custom Prompt (saved)</>
+                        : <><TextSelect className="w-4 h-4" /> Template</>}
                 </Label>
                 <ScrollArea className="flex-1 rounded-md border overflow-y-auto p-3 h-48">
                     <div className="whitespace-pre-wrap !text-xs text-foreground font-mono leading-tight">

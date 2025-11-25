@@ -24,9 +24,7 @@ interface UseGeminiApiReturn {
     sendToGemini: (params: GeminiApiParams) => Promise<GeminiApiResponse>;
 }
 
-export function useGeminiApi(
-    setResponseText: (text: string | null) => void
-): UseGeminiApiReturn {
+export function useGeminiApi(): UseGeminiApiReturn {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +40,6 @@ export function useGeminiApi(
         }
 
         setIsLoading(true);
-        setResponseText(null);
         setError(null);
 
         try {
@@ -116,8 +113,6 @@ export function useGeminiApi(
                 throw new Error("No valid clips found (all were under 20 seconds)");
             }
 
-            setResponseText(JSON.stringify(validClips, null, 2));
-
             // ✅ Return both clips and raw metadata
             return {
                 validClips,
@@ -127,7 +122,6 @@ export function useGeminiApi(
             console.error("Gemini API Error:", err);
             const errorMessage = `❌ Error: ${err.message}`;
             setError(errorMessage);
-            setResponseText(errorMessage);
             throw err;
         } finally {
             setIsLoading(false);

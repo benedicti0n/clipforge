@@ -1,5 +1,7 @@
 "use client";
 
+import { DollarSign } from "lucide-react";
+
 interface CostEstimateSectionProps {
     inputTokens?: number;
     outputTokens?: number;
@@ -25,8 +27,8 @@ export default function CostEstimateSection({
     };
 
     return (
-        <div className="space-y-3 pt-4 border-t">
-            <h3 className="text-sm font-medium text-muted-foreground">Cost Estimate</h3>
+        <div className="space-y-3 pt-3 border-t">
+            <h3 className="text-sm font-medium text-muted-foreground flex gap-2 items-center"><DollarSign className="w-4 h-4" /> Cost Estimate</h3>
             <div className="space-y-1 text-xs">
                 <div className="flex justify-between">
                     <span className="text-muted-foreground">

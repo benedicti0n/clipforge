@@ -7,7 +7,7 @@ import AddGeminiKeyDialog from "../Dialogs/AddGeminiKeyDialog";
 import DeleteGeminiKeyDialog from "../Dialogs/DeleteGeminiKeyDialog";
 import { useGeminiStore } from "../../store/geminiStore";
 import { GEMINI_MODELS } from "../../../constants/geminiModels";
-import { Dot } from "lucide-react";
+import { BrainCircuit, Dot, Key } from "lucide-react";
 
 export default function GeminiConfigSection() {
     const { keys, selectedKey, selectKey, selectedModel, selectModel } = useGeminiStore();
@@ -21,7 +21,7 @@ export default function GeminiConfigSection() {
         <div className="space-y-4">
             {/* Gemini Key */}
             <div className="space-y-1">
-                <Label className="text-sm">API Key</Label>
+                <Label className="text-sm flex gap-2 items-center"><Key className="w-4 h-4" /> API Key</Label>
                 <div className="flex gap-2">
                     <Select onValueChange={selectKey} value={selectedKey || ""}>
                         <SelectTrigger className="w-full">
@@ -49,7 +49,7 @@ export default function GeminiConfigSection() {
 
             {/* Model Selection */}
             <div className="space-y-1">
-                <Label className="text-sm">Model</Label>
+                <Label className="text-sm flex gap-2 items-center"><BrainCircuit className="w-4 h-4" /> Model</Label>
                 <Select onValueChange={selectModel} value={selectedModel || ""}>
                     <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select model" />
