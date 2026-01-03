@@ -102,9 +102,9 @@ export default function ClipsJsonRight({ transcriptSRT }: ClipsJsonRightProps) {
     }, [clips]);
 
     return (
-        <div className="pl-4 h-full space-y-3 flex flex-col">
+        <div className="h-full flex flex-1 flex-col relative pl-2">
             {/* Header with modal button */}
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between mb-2">
                 <h2 className="text-md font-bold text-muted-foreground flex gap-2 items-center">
                     <Terminal className="w-4 h-4" />
                     {clips.length > 0 ? `Extracted Clips (${clips.length})` : "Gemini Response"}
@@ -113,14 +113,14 @@ export default function ClipsJsonRight({ transcriptSRT }: ClipsJsonRightProps) {
             </div>
 
             {/* Scrollable Area */}
-            <ScrollArea className="flex-1 rounded-md border overflow-y-auto p-3 h-full">
+            <ScrollArea className="flex-1 rounded-md border bg-background border-border overflow-y-auto p-3">
                 <pre className="whitespace-pre-wrap text-xs text-foreground font-mono leading-tight">
                     {displayText}
                 </pre>
             </ScrollArea>
 
             <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
-                <div className="grid grid-cols-5 gap-2 w-full">
+                <div className="grid grid-cols-4 gap-2 w-full">
                     <Button variant="outline" className="w-full" onClick={handleDownloadJson}>
                         <Download className="w-4 h-4 mr-1" /> JSON
                     </Button>

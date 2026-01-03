@@ -29,15 +29,15 @@ export default function TranscriptPreviewModal({ transcriptSRT }: TranscriptPrev
                 </Button>
             </DialogTrigger>
 
-            <DialogContent className="max-w-4xl h-[80vh]">
+            <DialogContent className="max-2xl max-h-[80vh] flex flex-col">
                 <DialogHeader>
-                    <DialogTitle>Transcript Preview</DialogTitle>
+                    <DialogTitle className="flex items-center gap-2">Transcript Preview</DialogTitle>
                     <DialogDescription>
                         Full transcript in SRT format with timestamps
                     </DialogDescription>
                 </DialogHeader>
 
-                <ScrollArea className="flex-1 rounded-md border p-4 h-full">
+                <ScrollArea className="flex-1 mt-2 overflow-y-auto rounded-md border border-border bg-background p-3">
                     <pre className="whitespace-pre-wrap text-xs text-foreground font-mono leading-tight">
                         {transcriptSRT || "No transcription available."}
                     </pre>

@@ -39,15 +39,18 @@ export default function ClipsJson() {
     }, [uploadedSrt, segments]);
 
     return (
-        <div className="flex h-full">
-            {/* LEFT PANEL */}
-            <div className="w-1/3">
+        <div className="flex w-full h-full gap-6">
+            {/* Left panel */}
+            <div className="w-1/3 pr-2 flex flex-col justify-between gap-4">
                 <ClipsJsonLeft
                     isLoading={isLoading}
                     setIsLoading={setIsLoading}
                     transcriptSRT={transcriptSRT}
                 />
             </div>
+
+            {/* Divider */}
+            <div className="border-2 h-2/3 w-1 rounded-full border-border translate-y-1/4" />
 
             {/* RIGHT PANEL */}
             <div className="flex-1">
