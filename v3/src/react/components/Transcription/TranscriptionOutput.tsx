@@ -33,6 +33,7 @@ export default function TranscriptionOutput() {
     const bottomRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [showLogsModal, setShowLogsModal] = useState(false);
+    const userScrolledUp = useRef(false);
 
     const viewMode = useMemo(() => {
         if (isTranscribing) return "logs";
@@ -40,13 +41,14 @@ export default function TranscriptionOutput() {
         return "waiting";
     }, [isTranscribing, hasTranscript]);
 
-    // 🧭 Auto-scroll to bottom
+    // Auto-scroll to bottom only when actively transcribing (logs mode)
     useEffect(() => {
+        if (viewMode !== "logs") return;
         const scrollTimeout = setTimeout(() => {
             bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
         }, 50);
         return () => clearTimeout(scrollTimeout);
-    }, [logs, segments]);
+    }, [logs, viewMode]);
 
     // 🧾 Download handlers
     const handleDownloadTxt = () => {

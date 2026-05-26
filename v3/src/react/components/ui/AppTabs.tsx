@@ -10,6 +10,19 @@ import { ClipGeneration } from "../Tabs/ClipGeneration";
 export function AppTabs() {
     const [activeTab, setActiveTab] = React.useState("upload");
 
+    React.useEffect(() => {
+        const handleMoveToClipsJson = () => setActiveTab("clips-json");
+        const handleMoveToClipsGeneration = () => setActiveTab("clips-generation");
+
+        window.addEventListener("moveToClipsJson", handleMoveToClipsJson);
+        window.addEventListener("moveToClipsGeneration", handleMoveToClipsGeneration);
+
+        return () => {
+            window.removeEventListener("moveToClipsJson", handleMoveToClipsJson);
+            window.removeEventListener("moveToClipsGeneration", handleMoveToClipsGeneration);
+        };
+    }, []);
+
     return (
         <div className="w-full h-full flex flex-col">
             <Tabs

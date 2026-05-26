@@ -52,7 +52,15 @@ export function ClipGeneration() {
             message: "Starting clip generation..."
         })
 
+        let cleanup: (() => void) | null = null
+
         try {
+            if (window.electronAPI.onClipsGenerationProgress) {
+                cleanup = window.electronAPI.onClipsGenerationProgress((data) => {
+                    setProgress(data)
+                })
+            }
+
             const result = await window.electronAPI.generateClips({
                 inputPath: videoPath,
                 clips: clipsToGenerate,
@@ -70,6 +78,8 @@ export function ClipGeneration() {
             setGenerating(false)
             setProgress(null)
             toast.error(`Failed to generate clips: ${err.message}`)
+        } finally {
+            cleanup?.()
         }
     }
 

@@ -144,6 +144,18 @@ const electronAPI = {
     cancelClipsGeneration: () => ipcRenderer.invoke("cancel-clips-generation"),
 
     openClipsFolder: (folderPath: string) => ipcRenderer.invoke("open-clips-folder", folderPath),
+
+    onClipsGenerationProgress: (cb: (data: {
+        current: number;
+        total: number;
+        clipIndex: number;
+        status: string;
+        message: string;
+    }) => void) => {
+        const fn = (_: IpcRendererEvent, data: any) => cb(data);
+        ipcRenderer.on("clips-generation-progress", fn);
+        return () => ipcRenderer.removeListener("clips-generation-progress", fn);
+    },
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);
