@@ -1,0 +1,224 @@
+"use client";
+
+import { useWhisperStore } from "../../store/whisperStore";
+import { WHISPER_MODEL_FILES, WHISPER_MODELS_META, type WhisperModelKey } from "../../../constants/whisper";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Download, CheckCircle2, Loader2, Rabbit, Squirrel, Cat, Dog, Bird, Turtle, Trash2, FolderOpen, X } from "lucide-react";
+import { Card } from "../ui/card";
+import { useEffect } from "react";
+import { toast } from "sonner";
+
+const MODEL_ICONS: Record<WhisperModelKey, JSX.Element> = {
+    tiny: <Rabbit className="w-5 h-5" />,
+    base: <Squirrel className="w-5 h-5" />,
+    small: <Cat className="w-5 h-5" />,
+    medium: <Dog className="w-5 h-5" />,
+    "large-v2": <Bird className="w-5 h-5" />,
+    "large-v3": <Turtle className="w-5 h-5" />,
+};
+
+export default function WhisperModelSelect() {
+    const { selectedModel, setModel, cachedModels, downloading, downloadModel, progress, deleteModel, loadCachedModels, globalDownloading } = useWhisperStore();
+
+    const isCached = (key: WhisperModelKey) => cachedModels.has(key);
+    const isDownloading = (key: WhisperModelKey) => downloading === key;
+
+    const handleCardClick = (modelKey: WhisperModelKey) => {
+        if (isCached(modelKey)) {
+            setModel(modelKey);
+        }
+    };
+
+    const handleDelete = (e: React.MouseEvent, modelKey: WhisperModelKey) => {
+        e.stopPropagation();
+        deleteModel(modelKey);
+    };
+
+    useEffect(() => {
+        loadCachedModels();
+    }, []);
+
+    useEffect(() => {
+        // 🔁 Retry event
+        const offRetry = window.electronAPI?.onDownloadRetry?.((attempt) => {
+            toast(`Retrying download...`, {
+                description: `Attempt ${attempt + 1} of 3`,
+                duration: 3000,
+            });
+        });
+
+        // ❌ Failed event
+        const offFailed = window.electronAPI?.onDownloadFailed?.((error) => {
+            toast.error("Download failed", {
+                description:
+                    error || "The model could not be downloaded after 3 attempts.",
+                duration: 5000,
+            });
+        });
+
+        return () => {
+            offRetry?.();
+            offFailed?.();
+        };
+    }, []);
+
+    useEffect(() => {
+        const offSuccess = window.electronAPI?.onDownloadSuccess?.(({ file }) => {
+            const modelName = file.match(/ggml-(.*?)\./)?.[1] || "model";
+            toast.success(`Model "${modelName}" downloaded successfully!`, {
+                duration: 4000,
+            });
+        });
+
+        return () => offSuccess?.();
+    }, []);
+
+    useEffect(() => {
+        const offCanceled = window.electronAPI?.onDownloadCanceled?.(({ file }) => {
+            const name = file.match(/ggml-(.*?)\./)?.[1] || "model";
+            toast.warning(`Canceled download of "${name}"`, { duration: 3000 });
+        });
+        return () => offCanceled?.();
+    }, []);
+
+    return (
+        <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+                <label className="text-md font-bold text-foreground flex items-center gap-2">
+                    Whisper Models
+                    <button
+                        onClick={() => window.electronAPI?.openWhisperFolder()}
+                        className="text-muted-foreground hover:text-primary transition-colors"
+                        title="Open models folder"
+                    >
+                        <FolderOpen className="w-4 h-4" />
+                    </button>
+                </label>
+                {selectedModel && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <CheckCircle2 className="w-4 h-4 text-primary" />
+                        <span>
+                            Selected:{" "}
+                            <span className="font-medium capitalize">{selectedModel}</span>
+                        </span>
+                    </div>
+                )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+                {WHISPER_MODELS_META.map((model) => {
+                    const cached = isCached(model.key);
+                    const downloadingNow = isDownloading(model.key);
+                    const isSelected = selectedModel === model.key;
+
+                    return (
+                        <Card
+                            key={model.key}
+                            className={`p-4 cursor-pointer transition-all hover:shadow-md h-full ${isSelected
+                                ? "ring-2 ring-primary bg-primary/5"
+                                : cached
+                                    ? "hover:bg-accent"
+                                    : "opacity-75"
+                                } ${!cached ? "cursor-default" : ""}`}
+                            onClick={() => handleCardClick(model.key)}
+                        >
+                            <div className="flex flex-col justify-between h-full gap-4">
+                                {/* Top Section: Icon, Name, Metadata */}
+                                <div className="flex items-start gap-3">
+                                    <div className={isSelected ? "text-primary" : "text-muted-foreground"}>
+                                        {MODEL_ICONS[model.key]}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-start justify-between gap-2 relative">
+                                            <div>
+                                                <p className="font-semibold capitalize">{model.label}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {model.sizeMB} MB • {model.note}
+                                                </p>
+                                            </div>
+                                            <div className="absolute -right-2 -top-2">
+                                                {isSelected && (
+                                                    <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0" />
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Bottom Section: Status Badge or Download Button */}
+                                <div className="flex items-center justify-between gap-2">
+                                    {cached ? (
+                                        <>
+                                            <Badge
+                                                variant="default"
+                                                className="flex-1 rounded-md h-7"
+                                            >
+                                                <CheckCircle2 className="w-4 h-4" />
+                                                Cached
+                                            </Badge>
+                                            <Button
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                onClick={(e) => handleDelete(e, model.key)}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </>
+                                    ) : downloadingNow ? (
+                                        <div className="flex flex-col gap-1 w-full">
+                                            <Badge variant="outline" className="flex items-center gap-1 w-fit">
+                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                                Downloading {progress.toFixed(0)}%
+                                            </Badge>
+                                            <div className="w-full h-[3px] bg-muted-foreground/20 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-primary transition-all duration-200"
+                                                    style={{ width: `${progress}%` }}
+                                                />
+                                            </div>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    window.electronAPI?.cancelDownload(WHISPER_MODEL_FILES[model.key].filename);
+                                                }}
+                                            >
+                                                <X className="w-4 h-4" />
+                                                Cancel
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (!globalDownloading) {
+                                                    console.log("🔽 Download clicked for:", model.key);
+                                                    downloadModel(model.key);
+                                                } else {
+                                                    toast.warning("Another download is already in progress", {
+                                                        description: "Please wait or cancel the current download first.",
+                                                        duration: 4000,
+                                                    });
+                                                }
+                                            }}
+                                            disabled={globalDownloading && !isDownloading(model.key)} // 👈 disables all other buttons
+                                            className="gap-2 w-full"
+                                        >
+                                            <Download className="w-4 h-4" />
+                                            Download
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        </Card>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}

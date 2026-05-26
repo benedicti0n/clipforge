@@ -1,0 +1,42 @@
+export const GEMINI_MODELS = [
+    {
+        id: "gemini-2.5-pro-latest",
+        label: "Gemini 2.5 Pro",
+        price: "$10/million in, $30/million out",
+        speed: "Most accurate, slower",
+        inPrice: 10,
+        outPrice: 30,
+    },
+    {
+        id: "gemini-2.5-flash-latest",
+        label: "Gemini 2.5 Flash",
+        price: "$0.50/million in, $1.50/million out",
+        speed: "Fast, good balance",
+        inPrice: 0.5,
+        outPrice: 1.5,
+    },
+    {
+        id: "gemini-2.5-flash-lite-latest",
+        label: "Gemini 2.5 Flash Lite",
+        price: "$0.10/million in, $0.30/million out",
+        speed: "Ultra fast, cheaper",
+        inPrice: 0.1,
+        outPrice: 0.3,
+    },
+    {
+        id: "gemini-2.0-flash-latest",
+        label: "Gemini 2.0 Flash",
+        price: "$0.35/million in, $1.05/million out",
+        speed: "Fast, balanced",
+        inPrice: 0.35,
+        outPrice: 1.05,
+    },
+    {
+        id: "gemini-2.0-flash-lite-latest",
+        label: "Gemini 2.0 Flash Lite",
+        price: "$0.075/million in, $0.30/million out",
+        speed: "Very fast, cost-effective",
+        inPrice: 0.075,
+        outPrice: 0.3,
+    },
+];
