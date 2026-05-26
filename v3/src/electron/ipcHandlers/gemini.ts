@@ -87,7 +87,31 @@ Remember: Output ONLY the JSON array. Nothing else.`;
                 }
 
                 try {
-                    const parsed = JSON.parse(rawText);
+                    let fixedJson = rawText;
+
+                    const jsonStart = fixedJson.indexOf('[');
+                    const jsonEnd = fixedJson.lastIndexOf(']');
+                    if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+                        fixedJson = fixedJson.substring(jsonStart, jsonEnd + 1);
+                    }
+
+                    fixedJson = fixedJson.replace(/"startTime":\s*(\d{2}:\d{2}:\d{2}\.?\d*)/g, '"startTime": "$1"');
+                    fixedJson = fixedJson.replace(/"endTime":\s*(\d{2}:\d{2}:\d{2}\.?\d*)/g, '"endTime": "$1"');
+                    fixedJson = fixedJson.replace(/"totalDuration":\s*(\d+\.?\d*)/g, '"totalDuration": "$1"');
+
+                    let parsed;
+                    try {
+                        parsed = JSON.parse(fixedJson);
+                    } catch {
+                        const lastValidObject = fixedJson.lastIndexOf('},');
+                        if (lastValidObject !== -1) {
+                            fixedJson = fixedJson.substring(0, lastValidObject + 1) + ']';
+                            parsed = JSON.parse(fixedJson);
+                        } else {
+                            throw new Error("Could not find valid JSON array");
+                        }
+                    }
+
                     if (!Array.isArray(parsed)) {
                         throw new Error("Response is not a JSON array");
                     }

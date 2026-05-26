@@ -73,49 +73,48 @@ export function useGeminiApi(): UseGeminiApiReturn {
             const validClips = parsed.filter((clip: any) => {
                 if (!clip.totalDuration) return false;
 
-                const parts = clip.totalDuration.split(":");
-                const seconds =
-                    parseInt(parts[0]) * 3600 +
-                    parseInt(parts[1]) * 60 +
-                    parseInt(parts[2]);
+                let seconds;
+                if (typeof clip.totalDuration === "number") {
+                    seconds = clip.totalDuration;
+                } else if (typeof clip.totalDuration === "string") {
+                    if (clip.totalDuration.includes(":")) {
+                        const parts = clip.totalDuration.split(":");
+                        seconds =
+                            parseInt(parts[0]) * 3600 +
+                            parseInt(parts[1]) * 60 +
+                            parseFloat(parts[2]);
+                    } else {
+                        seconds = parseFloat(clip.totalDuration);
+                    }
+                }
 
                 return seconds >= 20;
             });
 
-            // Validate required fields
-            if (validClips.length > 0) {
-                const requiredFields = [
-                    "startTime",
-                    "endTime",
-                    "transcriptionPart",
-                    "totalDuration",
-                    "viralityScore",
-                    "suitableCaption",
-                ];
-                const firstItem = validClips[0];
-                const missingFields = requiredFields.filter(
-                    (field) => !(field in firstItem)
-                );
+            // Normalize clip fields (handle different field names)
+            const normalizedClips = validClips.map((clip: any) => ({
+                startTime: clip.startTime || clip.start_time || "",
+                endTime: clip.endTime || clip.end_time || "",
+                transcriptionPart: clip.transcriptionPart || clip.transcription || clip.summary || clip.description || "",
+                totalDuration: typeof clip.totalDuration === "number"
+                    ? clip.totalDuration.toString()
+                    : clip.totalDuration || "0",
+                viralityScore: clip.viralityScore || clip.virality_score || 5,
+                suitableCaption: clip.suitableCaption || clip.caption || clip.title || "",
+            }));
 
-                if (missingFields.length > 0) {
-                    throw new Error(
-                        `Missing required fields: ${missingFields.join(", ")}`
-                    );
-                }
-            }
-
-            const removedCount = parsed.length - validClips.length;
+            const removedCount = parsed.length - normalizedClips.length;
             console.log(
-                `✅ Extracted ${validClips.length} valid clips (removed ${removedCount} clips under 20 seconds)`
+                `✅ Extracted ${normalizedClips.length} valid clips (removed ${removedCount} clips under 20 seconds)`
             );
 
-            if (validClips.length === 0) {
+            if (normalizedClips.length === 0) {
                 throw new Error("No valid clips found (all were under 20 seconds)");
             }
 
             // ✅ Return both clips and raw metadata
             return {
-                validClips,
+                validClips: normalizedClips,
                 raw: data.raw
             };
         } catch (err: any) {
