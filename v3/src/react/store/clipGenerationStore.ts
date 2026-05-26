@@ -33,11 +33,14 @@ interface ClipGenerationState {
     settings: {
         paddingSeconds: number
     }
+    selectedClipIndices: number[]
     setGenerating: (isGenerating: boolean) => void
     setProgress: (progress: ClipGenerationState['progress']) => void
     setResult: (result: ClipGenerationResult) => void
     setSettings: (settings: Partial<ClipGenerationState['settings']>) => void
+    setSelectedClipIndices: (indices: number[]) => void
     clearClips: () => void
+    reset: () => void
 }
 
 export const useClipGenerationStore = create<ClipGenerationState>()(
@@ -50,6 +53,7 @@ export const useClipGenerationStore = create<ClipGenerationState>()(
             settings: {
                 paddingSeconds: 0,
             },
+            selectedClipIndices: [],
             setGenerating: (isGenerating) => set({ isGenerating }),
             setProgress: (progress) => set({ progress }),
             setResult: (result) => set({
@@ -62,19 +66,36 @@ export const useClipGenerationStore = create<ClipGenerationState>()(
                     clipIndex: result.totalClips - 1,
                     status: 'completed',
                     message: `Generated ${result.successfulClips} clips, ${result.failedClips} failed`
-                } : null
+                } : {
+                    current: result.totalClips,
+                    total: result.totalClips,
+                    clipIndex: result.totalClips - 1,
+                    status: 'error',
+                    message: `Generated ${result.successfulClips} clips, ${result.failedClips} failed`
+                }
             }),
             setSettings: (settings) => set((state) => ({
                 settings: { ...state.settings, ...settings }
             })),
+            setSelectedClipIndices: (indices) => set({ selectedClipIndices: indices }),
             clearClips: () => set({
                 generatedClips: [],
                 outputDir: '',
                 progress: null
             }),
+            reset: () => set({
+                generatedClips: [],
+                outputDir: '',
+                isGenerating: false,
+                progress: null
+            }),
         }),
         {
             name: 'clipforge-clip-generation',
+            partialize: (state) => ({
+                settings: state.settings,
+                selectedClipIndices: state.selectedClipIndices,
+            }),
         }
     )
 )

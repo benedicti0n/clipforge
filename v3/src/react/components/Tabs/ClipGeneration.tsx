@@ -8,13 +8,15 @@ import { GenerationSettings } from "@/components/ClipGeneration/GenerationSettin
 import { GenerationProgress } from "@/components/ClipGeneration/GenerationProgress"
 import { ExportSrtPerClip } from "@/components/ClipGeneration/ExportSrtPerClip"
 import { VideoExport } from "@/components/ClipGeneration/VideoExport"
-import { Video, Scissors, Film } from "lucide-react"
+import { Video, Scissors, Film, X } from "lucide-react"
 import { toast } from "sonner"
 
 export function ClipGeneration() {
-    const { videoPath } = useVideoStore()
+    const { video } = useVideoStore()
     const { clips } = useClipsResponseStore()
-    const { isGenerating, setGenerating, setProgress, setResult, settings } = useClipGenerationStore()
+    const { isGenerating, setGenerating, setProgress, setResult, settings, selectedClipIndices } = useClipGenerationStore()
+
+    const videoPath = video?.filePath || null
 
     const handleGenerateClips = async () => {
         if (!videoPath) {
@@ -27,6 +29,15 @@ export function ClipGeneration() {
             return
         }
 
+        const clipsToGenerate = selectedClipIndices.length > 0
+            ? selectedClipIndices.map(i => clips[i])
+            : clips
+
+        if (clipsToGenerate.length === 0) {
+            toast.error("No clips selected. Select clips to generate.")
+            return
+        }
+
         if (!window.electronAPI) {
             toast.error("Electron API not available")
             return
@@ -35,7 +46,7 @@ export function ClipGeneration() {
         setGenerating(true)
         setProgress({
             current: 0,
-            total: clips.length,
+            total: clipsToGenerate.length,
             clipIndex: -1,
             status: "starting",
             message: "Starting clip generation..."
@@ -44,7 +55,7 @@ export function ClipGeneration() {
         try {
             const result = await window.electronAPI.generateClips({
                 inputPath: videoPath,
-                clips: clips,
+                clips: clipsToGenerate,
                 paddingSeconds: settings.paddingSeconds
             })
 
@@ -86,22 +97,38 @@ export function ClipGeneration() {
                             <div className="flex items-center gap-4 text-sm text-muted-foreground">
                                 <div className="flex items-center gap-2">
                                     <Video className="h-4 w-4" />
-                                    <span>Video: {videoPath ? "Loaded" : "Not loaded"}</span>
+                                    <span>Video: {video ? "Loaded" : "Not loaded"}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <Film className="h-4 w-4" />
-                                    <span>Clips: {clips.length}</span>
+                                    <span>Clips: {clips.length} ({selectedClipIndices.length || clips.length} selected)</span>
                                 </div>
                             </div>
-                            <Button
-                                className="w-full"
-                                size="lg"
-                                onClick={handleGenerateClips}
-                                disabled={isGenerating || !videoPath || clips.length === 0}
-                            >
-                                <Scissors className="h-4 w-4 mr-2" />
-                                {isGenerating ? "Generating..." : "Generate Selected Clips"}
-                            </Button>
+                            <div className="flex gap-2">
+                                <Button
+                                    className="flex-1"
+                                    size="lg"
+                                    onClick={handleGenerateClips}
+                                    disabled={isGenerating || !videoPath || clips.length === 0}
+                                >
+                                    <Scissors className="h-4 w-4 mr-2" />
+                                    {isGenerating ? "Generating..." : "Generate Selected Clips"}
+                                </Button>
+                                {isGenerating && (
+                                    <Button
+                                        variant="destructive"
+                                        size="lg"
+                                        onClick={async () => {
+                                            if (window.electronAPI) {
+                                                await window.electronAPI.cancelClipsGeneration?.()
+                                            }
+                                            useClipGenerationStore.getState().setGenerating(false)
+                                        }}
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </Button>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
 

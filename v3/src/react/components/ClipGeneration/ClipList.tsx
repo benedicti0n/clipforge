@@ -1,32 +1,37 @@
 import { useClipsResponseStore } from "@/store/clipsResponseStore"
+import { useClipGenerationStore } from "@/store/clipGenerationStore"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Video, Download, Play } from "lucide-react"
 import { useState } from "react"
 
 export function ClipList() {
     const { clips } = useClipsResponseStore()
-    const [selectedClips, setSelectedClips] = useState<Set<number>>(new Set())
+    const { selectedClipIndices, setSelectedClipIndices } = useClipGenerationStore()
+    const [localSelected, setLocalSelected] = useState<Set<number>>(new Set(clips.map((_, i) => i)))
 
     const toggleClip = (index: number) => {
-        const newSelected = new Set(selectedClips)
+        const newSelected = new Set(localSelected)
         if (newSelected.has(index)) {
             newSelected.delete(index)
         } else {
             newSelected.add(index)
         }
-        setSelectedClips(newSelected)
+        setLocalSelected(newSelected)
+        setSelectedClipIndices(Array.from(newSelected))
     }
 
     const selectAll = () => {
-        setSelectedClips(new Set(clips.map((_, i) => i)))
+        const all = new Set(clips.map((_, i) => i))
+        setLocalSelected(all)
+        setSelectedClipIndices(Array.from(all))
     }
 
     const deselectAll = () => {
-        setSelectedClips(new Set())
+        setLocalSelected(new Set())
+        setSelectedClipIndices([])
     }
 
     if (clips.length === 0) {
@@ -54,7 +59,7 @@ export function ClipList() {
                     </div>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                    {selectedClips.size} clips selected for generation
+                    {localSelected.size} clips selected for generation
                 </p>
             </CardHeader>
             <CardContent>
@@ -66,7 +71,7 @@ export function ClipList() {
                                 className="flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/50"
                             >
                                 <Checkbox
-                                    checked={selectedClips.has(index)}
+                                    checked={localSelected.has(index)}
                                     onCheckedChange={() => toggleClip(index)}
                                     className="mt-1"
                                 />
@@ -83,7 +88,7 @@ export function ClipList() {
                                         </Badge>
                                     </div>
                                     <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                                        {clip.transcriptionPart.substring(0, 150)}...
+                                        {clip.transcriptionPart?.substring(0, 150) || "(no transcription)"}...
                                     </p>
                                     <p className="text-sm font-medium">"{clip.suitableCaption}"</p>
                                 </div>

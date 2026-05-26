@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useClipsResponseStore } from "@/store/clipsResponseStore"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
 import { Download, FileText } from "lucide-react"
 import { toast } from "sonner"
 
